@@ -2,7 +2,6 @@
 from pathlib import Path
 from loguru import logger
 from uvbekutils import select_file
-# from uvbekutils import get_file_name
 from uvbekutils import setup_loguru, exit_yes, select_from_list, text_box, list_pick
 import webbrowser
 
@@ -47,6 +46,7 @@ def url_error(url):
         # logger.debug(e)
         return e
 
+
 def get_browser_option(open_browser):
     """ when do we want to eopn browser window? optionas are 'all','error','no'
 
@@ -86,10 +86,6 @@ def check_boe_urls(key_containing_url=None, key_for_used=None, open_browser=Fals
     from Work.read_boe_xls import read_boe_xls
 
     if boe_xls is None:
-        # boe_xls = get_file_name("Pick BOE file (xlsx) with urls to check.",
-        #                          initial_dir=ATTACHMENTS_INITIAL_DIR,
-        #                          title2="Pick BOE file (xlsx)")
-
         boe_xls = select_file(
             title="Pick BOE file (xlsx) with urls to check.",
             start_dir=ATTACHMENTS_INITIAL_DIR,
@@ -121,19 +117,11 @@ def check_boe_urls(key_containing_url=None, key_for_used=None, open_browser=Fals
 
     # get key like '{priority}' if not passed
     if key_for_used is None:
-        # key_for_used = select_from_list(county_sheet_keys,
-        #                                 'Select tag to id counties being used (None for all)',
-        #                                 select_type='radio')
         key_for_used = list_pick(county_sheet_keys,
                                  'Select Field',
                                  "Select tag to id counties being used (often '{priority}', None for all)",
                                  select_mode='single',
                                  pre_select=False)[0]
-
-    # not selecting anything above will return a blank string
-    # Can set to None after we know to use all and not prompt
-    # if key_for_used == 'all':
-    #     key_for_used = None
 
     # make sure key is on file
     if key_for_used is not None:  # None ok from select = all so have to check
@@ -263,10 +251,6 @@ def check_short_boe_urls(key_containing_short_url=None, key_containing_url=None,
                                              pre_select=False,
                                             allow_none=True,
                                              )[0]
-    # Can set to None after we know to use all and not prompt
-    # if key_for_used == 'all':
-    #     key_for_used = None
-
     # make sure key is on file
     if key_for_used is not None and key_for_used is not '':  # None ok from select = all so have to check
         key_for_used = key_for_used.lower()
@@ -325,4 +309,4 @@ if __name__ == '__main__':
     #                boe_xls=Path("~/Dropbox/Postcard Files/PythonPrograms/Development/LeviTool/Work/TEST BOE Info VA.xlsx").expanduser(),)
     # check_boe_urls(key_containing_url='{specificurl}', key_for_used='{use}', open_browser='All',
     #                boe_xls=Path("~/Dropbox/Postcard Files/PythonPrograms/Development/LeviTool/Work/TEST BOE Info VA.xlsx").expanduser())
-    check_short_boe_urls()
+    check_short_boe_urls(open_browser=True)
