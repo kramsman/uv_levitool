@@ -1,0 +1,439 @@
+"""
+LeviTool.py creates the attachments need for postcard writing namely scripts and labels.  It does this by performing
+a "mail merge" on input files, replacing fields in {} with those from an Excel input file.
+All the input files must be in a directory named 'Input', and must contain one xlsx with the info to be merged and
+any number of docx files which will have the dat merged into them.
+A pdf of each 'docx' is created after the merge.
+A separate subdirectory under a min directory named "Output" is created for each used row in the input xlsx file.
+"""
+
+# Started as Filltemplate5.py
+# NEED TO USE BACK VERSION OF OPENPYXL for bug caused in 3.1: county_sheet_df = pd.ExcelFile( script_file_name).parse(
+# sheet_name='Counties', nrows=1)
+# 7/24/23 Changed deprecated and removed series.iteritems to series.items in 1 line
+# 1/31/24 Renamed LeviToolWin5.0.py to LeviTool.py and started git
+# done 2/1/24 strip values to be replaced.  Tab or pads on phone or county creates off center labels and could run over.
+#   sb fixed by reading in county sheet w astype(str): errors if val is not a string (eg blank = nan for {url})
+#   stripped vals to remove unseen chars on phone/county when reading in county sheet
+# use openpyxl 3.0.10 not 3.1.2 because later bombs if xlsx has filters  https://stackoverflow.com/questions/75382340/python-pandas-read-excel-error-value-must-be-either-numerical-or-a-string-conta
+
+
+#TODO currently blanks replaced with "' '" in df used_counties_df.  OK or should be blank? Or '.'?
+
+import subprocess
+subprocess.run(["uv", "add", "python-docx"], check=True)
+
+import glob
+import re
+from collections import Counter
+from copy import deepcopy
+from pathlib import Path
+
+import pandas as pd
+# import pymsgbox
+from uvbekutils import exit_yes, exit_yes_no, get_dir_name, setup_loguru, text_box, select_file
+from uvbekutils import pyautobek
+from check_boe_urls import check_boe_urls, check_short_boe_urls
+from docx import Document  # package in Conda is python-docx, not simply docx
+from docx2pdf import convert
+from loguru import logger
+from Work.find_longest_value_in_label_rows import max_label_lengths
+
+pd.options.mode.copy_on_write = True  # fix chain assignment forced in Pandas 3.0
+
+INITIAL_ATTACHMENT_DIR = Path("~/Dropbox/Postcard Files/Attachments/Campaigns/").expanduser()
+
+# TODO can do away specifying length fields and instead use 'keys' list
+# Fields to report max length for checking label fit
+LENGTH_CHECK_FIELDS = ['CNTYFILENAME', 'PHONE', 'URL']
+LENGTH_CHECK_FIELDS = []  #FIXME: Above fields are not what are being used for WI.  Don't the keys in doc work?
+# field to use when checking label fit for only rows we are writing
+LENGTH_CHECK_FIELDS_SELECT = 'PRIORITY'
+
+setup_loguru("DEBUG", "DEBUG", )
+
+
+def count_brackets(s):
+    """ counts the difference in the number of left and right brackets. returns -10000 if difference is more than 1 """
+
+    bracket_count = s.count('{') - s.count('}')
+    if bracket_count < -1 or bracket_count > 1:
+        bracket_count = -10000
+
+    return bracket_count
+
+
+def find_keys(document):
+    """ Levi code.  Finds keys three levels deep in document levels."""
+    # Keys are fields in document to be replaced
+    keys = set()
+
+    d = deepcopy(document)
+
+    for section in d.sections:
+        for paragraph in section.header.paragraphs:
+            new_keysx = re.findall(r'{[a-zA-Z0-9]+}', paragraph.text)
+            new_keys = [x.upper() for x in new_keysx]
+            keys = keys.union({k.upper() for k in new_keys})
+
+    for paragraph in d.paragraphs:
+        new_keysx = re.findall(r'{[a-zA-Z0-9]+}', paragraph.text)
+        new_keys = [x.upper() for x in new_keysx]
+        keys = keys.union({k.upper() for k in new_keys})
+
+    for table in d.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for paragraph in cell.paragraphs:
+                    new_keysx = re.findall(r'{[a-zA-Z0-9]+}', paragraph.text)
+                    new_keys = [x.upper() for x in new_keysx]
+                    keys = keys.union({k.upper() for k in new_keys})
+
+    return keys
+
+
+def replace_tags(paragraph, county_row):
+    """ Levi code.  Replace tags/keys in paragraph. Runs are weird docx objects. """
+
+    brackets = 0
+    partial_runs = []
+    for run in paragraph.runs:
+        partial_runs.append(run)
+        brackets += count_brackets(run.text)
+        if brackets == 0:
+            text = ''.join([r.text for r in partial_runs])
+            for key, val in county_row.items():
+                text = re.sub(key, val, text, flags=re.IGNORECASE)  # use re to replace and ignore case
+            partial_runs[0].text = text
+            for r in partial_runs[1:]:
+                r.text = ''
+
+            brackets = 0
+            partial_runs = []
+        elif brackets != 1:
+            msg = f'Template error near "{run.text}" in script template. Make sure sequence to be replaced has consistent formatting.'
+            logger.error(msg)
+            raise ValueError(msg)
+
+
+def make_replacements(document, county_row):
+    """ Levi code. Call the make replacement code multiple times. """
+
+    for paragraph in document.paragraphs:
+        replace_tags(paragraph, county_row)
+
+    for table in document.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for paragraph in cell.paragraphs:
+                    replace_tags(paragraph, county_row)
+
+    return
+
+
+def main_levi():
+    """ Read inputs, make replacements.  Easy peasy! """
+
+    def check_header_count(hdr_str, header_count, num_allowed):
+        """ make sure headers appear in file only given number of times and error if not"""
+
+        if header_count != num_allowed:
+            msg = f"'{hdr_str}' does not appear {num_allowed} time(s), instead {header_count}\n\nEXITING."
+            logger.error(msg)
+            exit_yes(msg, "ERROR")
+
+    def prompt_for_df_values(df, msg1, box_title):
+        """ display values of a dataframe after converting to string and prompt to continue"""
+
+        df_string = df.to_string(index=False)
+        logger.debug("here")
+
+        exit_yes_no(f"{msg1}\n\n\n{df_string}\n\n", box_title)
+
+    if True:
+        # Select input dir: True via dialog; False hardcoded
+        # path_input = get_dir_name("Pick 'Input' Directory",
+        #                            "Select the directory containing the input files for LeviTool (eg .../GA "
+        #                            "files/Input')",
+        #                            INITIAL_ATTACHMENT_DIR)
+
+        path_input = select_file(
+            title="Pick 'Input' Directory",
+            start_dir=INITIAL_ATTACHMENT_DIR,
+            files_like="Input",
+            choices=["Select", "Cancel"],
+            mode="dir",  # file, dir or both
+            title2="Select the firectory which contains all your template files (docs and the xlsx). Must be named "
+                   "'Input'"
+        )
+        print(f"Selected: {path_input}")
+        path_input = Path(path_input)
+    else:
+        path_input = Path("~/Dropbox/Postcard Files/Attachments/Campaigns/Test box and image/Input").expanduser()
+    path_root = path_input.parents[0]
+
+    if path_input.parts[-1].upper() != "INPUT":
+        msg = f"Last part of chosen directory:\n\n {path_input}\n\nDoes not equal 'INPUT'.\n\nEXITING."
+        logger.error(msg)
+        exit_yes(msg, "ERROR")
+
+
+    # Remove choice of subdirectory for each county since Sincere expects them all in ome dir
+    # choice = pyautobek.confirm("Put output files in single Output directory rather than in separate dirs by county ("
+    #                            "old way)?",
+    #                   title='Single County Dir?',
+    #                   buttons=['Yes', 'No', 'Exit'])
+    choice = 'yes'
+    if choice == 'yes':
+        SINGLE_COUNTY_OUTPUT_DIR = True
+    elif choice == 'no':
+        SINGLE_COUNTY_OUTPUT_DIR = False
+    else:
+        exit()
+
+    # list of all xlsx files not starting with ~ (temporary files)
+    xlsx_files = glob.glob(str(path_input / '[!~]*.xlsx'))
+
+    if len(xlsx_files) != 1:  # must have 1, not more
+        msg = (f"Must have only 1 xlsx file in the Input directory; there are {len(xlsx_files)}.  \n\n"
+               f"{path_input}\n\n"
+               f"EXITING.")
+        logger.error(msg)
+        exit_yes(msg, "ERROR")
+    xlsx_file_name = xlsx_files[0]  # filename of the first (and only) xlsx
+
+    # Get list of all template files (docx) that we will update not starting with ~ (temporary files).
+    docx_files = glob.glob(str(path_input / '[!~]*.docx'))
+    if not docx_files:
+        msg = f"No docx input file found in directory: '{path_input}' EXITING."
+        logger.error(msg)
+        exit_yes(msg, "ERROR")
+
+    logger.info(f"Will replace tags in {len(docx_files)} documents per county.\n")
+
+    # loop through each docx template file and put keys in required_keys set
+    required_keys = set()
+    for docx_file in docx_files:
+        document_of_docx_file = Document(docx_file)
+        keys_in_doc = find_keys(document_of_docx_file)
+        required_keys = required_keys.union(keys_in_doc)
+
+    # Add the keys required by the program but not necessarily used for replacement in docxs.
+    required_keys.add('{STATE}')
+    required_keys.add('{CNTYFILENAME}')  # added BEK 4/23/22
+    required_keys.add('{USE}')
+    for field in LENGTH_CHECK_FIELDS:
+        # add keys for those we are checking max length
+        required_keys.add(f"{{{field}}}")
+    if LENGTH_CHECK_FIELDS_SELECT:
+        # add field used in filtering rows for max length check
+        required_keys.add(f"{{{LENGTH_CHECK_FIELDS_SELECT}}}")
+
+    # Note .astype(str) below which reads all data as string and converts missing to 'nan'
+    county_sheet_df = pd.read_excel(xlsx_file_name, sheet_name='Counties', header=None, skiprows=1,
+                                    nrows=1).astype(str)
+    # read only row 2 (1 is skipped above) to get keys
+    county_sheet_keys = county_sheet_df.loc[0, :].values.tolist()
+    county_sheet_keys = [x.upper() for x in county_sheet_keys if x != "nan"]
+
+    # check that three key tokens only appear once (needed and may not be on file)
+    check_header_count('{USE}', county_sheet_keys.count('{USE}'), 1)
+    check_header_count('{STATE}', county_sheet_keys.count('{STATE}'), 1)
+    check_header_count('{CNTYFILENAME}', county_sheet_keys.count('{CNTYFILENAME}'), 1)
+
+    # check for one occurrence for keys for those we are checking max length
+    for field in LENGTH_CHECK_FIELDS:
+        check_header_count(f"{{{field}}}", county_sheet_keys.count(f"{{{field}}}"), 1)
+
+    # check for one occurrence of field if we are checking length for a subset we are writing
+    if LENGTH_CHECK_FIELDS_SELECT:
+        check_header_count(f"{{{LENGTH_CHECK_FIELDS_SELECT}}}",
+                           county_sheet_keys.count(f"{{{LENGTH_CHECK_FIELDS_SELECT}}}"), 1)
+
+    # keys in file heading also being replaced in docxs
+    county_sheet_required_keys = [c.upper() for c in county_sheet_keys if c.upper() in required_keys]
+
+    # get key values and number of occurrences in list of keys
+    key_counts = Counter(county_sheet_required_keys)
+
+    bad_key_counts = [(k, key_counts[k]) for k in key_counts if key_counts[k] > 1]  # flag >1
+    if bad_key_counts:
+        fld_string = '\n'.join([f"{tup[0]}: {str(tup[1])}" for tup in bad_key_counts])
+        msg = f"The following column keys are in the sheet more than once:\n\n{fld_string}"
+        logger.error(msg)
+        exit_yes(msg, "Duplicate Key Columns in Sheet")
+
+    try:
+        county_sheet = pd.read_excel(xlsx_file_name, sheet_name='Counties', header=0, skiprows=1).astype(str)
+    except BaseException as e:
+        msg = "Install openpyxl 3.0.10 not 3.1.2 because later bombs if xlsx has filters"
+        logger.error(msg)
+        logger.error(e)
+        logger.error("Install openpyxl 3.0.10 not 3.1.2 because later bombs if xlsx has filters")
+        exit_yes(msg)
+
+    county_sheet.columns = [c.upper() for c in county_sheet.columns]  # convert all column names to uppercase
+    # get list of required columns
+    required_county_cols = [c.upper() for c in county_sheet.columns if c.upper() in required_keys]
+
+    # only keep needed columns in df
+    county_sheet = county_sheet[required_county_cols]
+    # replace fields with stripped values then "' '" to account for and see multi spaces
+    county_sheet = county_sheet.apply(lambda x: x.str.strip())
+
+    # Create df of ony those counties being processed.  Used below.  Fields are cleaned up here.
+    used_counties_df = county_sheet.loc[county_sheet['{USE}'].notnull()]
+
+    # replace fields with string showing quotes ("' '") to make easier to see.
+    # May not want to replace in file used for replacements so we could replace keys with spaces
+    # in docxs
+    used_counties_df.replace([""], ["' '"], inplace=True)
+    list_of_used_county_names = used_counties_df['{CNTYFILENAME}'].to_list()
+    string_of_used_county_names = ",".join(list_of_used_county_names)
+    logger.info(f"Running on counties: {string_of_used_county_names}")
+    logger.info("")
+    exit_yes_no(f"Will process {used_counties_df.shape[0]} of {county_sheet.shape[0]} total counties:\n\n"
+                f"{string_of_used_county_names}\n\nContinue?")
+
+    # get max lengths of county to check label
+    # TODO this is where 'keys' list could be used
+    for field in LENGTH_CHECK_FIELDS:
+        max_field = max(county_sheet[f"{{{field}}}"], key=len)
+        logger.info(f"Max of '{{{field}}}' column: '{max_field}', length is {len(max_field)}")
+    logger.info("")
+
+    # get max lengths of county to check label for rows selected
+    if LENGTH_CHECK_FIELDS_SELECT:
+        for field in LENGTH_CHECK_FIELDS:
+            max_field = max(county_sheet.loc[county_sheet[f"{{{LENGTH_CHECK_FIELDS_SELECT}}}"].notnull()]
+                            [f"{{{field}}}"], key=len)
+            logger.info(f"Max of '{{{field}}}' where '{{{LENGTH_CHECK_FIELDS_SELECT}}}' is not blank: '{max_field}', length is {len(max_field)}")
+    logger.info("")
+
+    exit_yes_no("Look at the log.  Do you want to continue running or set {USE} based on the longest substitutions?  "
+                "Check the log for values.\n\nContinue?",
+                "Continue or Set {USE} by Field Max Lengths?")
+
+    # check if any fields to be substituted have nan values
+    logger.debug("checking nans")
+    nan_in_df = used_counties_df[used_counties_df.isnull().any(axis=1)]
+    if not nan_in_df.empty:
+        # prompt_for_df_values(nan_in_df,
+        #                      "Some records contain missing ('nan') values that will be replaced in docxs:",
+        #                      "OK to Substitute Missing Values ('nan's)?")
+        print(f"\nUSED COUNTIES CONTAINING 'nan' DATA")
+        with pd.option_context('display.max_rows', None, 'display.max_columns', None):
+            print(nan_in_df)
+        pyautobek.alert("Some info to be merged contains 'nan'.\n\nSee log.", "ERROR: Used data contains 'nan'")
+
+    # check if any fields to be substituted have blank values
+    logger.debug("checking blanks")
+    blank_in_df = used_counties_df[
+        used_counties_df.eq("' '").any(axis=1)]  # all fields replaced with stripped val then ' '  above to see
+
+    if not blank_in_df.empty:
+        # prompt_for_df_values(blank_in_df,
+        #                      "Some records contain missing blank values that will be replaced in docxs:",
+        #                      "OK to Substitute Blank Values?")
+        print(f"\nUSED COUNTIES CONTAINING DATA WITH SPACES")
+        with pd.option_context('display.max_rows', None, 'display.max_columns', None):
+            print(blank_in_df[list(keys_in_doc)])
+        pyautobek.alert("Some info to be merged contains spaces.\n\nSee log.", "ERROR: Used data contains spaces")
+
+    exit_yes_no("Close MS Word now if open\n\n",
+                'Continue or Exit?', )
+
+    count = 0
+    for _, county_row in used_counties_df.iterrows():  # uses df of only rows with used != nan from above
+        state_fn = f"{county_row['{STATE}']}-{county_row['{CNTYFILENAME}']}"
+        logger.debug("in used_counties_df.iterrows")
+
+        for docx_file in docx_files:
+            logger.debug("creating Document using Document(docx_file)")
+            document_of_docx_file = Document(docx_file)
+            script = deepcopy(document_of_docx_file)
+            logger.debug("ready to call make_replacements")
+            make_replacements(script, county_row)
+
+            output_dir = path_root / 'Output'
+            output_docxs_dir = path_root / 'Output' / 'Docxs'
+            output_pdfs_dir = path_root / 'Output' / 'Pdfs'
+
+            if not output_dir.exists():
+                output_dir.mkdir()
+            if not output_docxs_dir.exists():
+                output_docxs_dir.mkdir()
+            if not output_pdfs_dir.exists():
+                output_pdfs_dir.mkdir()
+
+            file_with_state = f"{state_fn} {Path(docx_file).name}"  # use filename var to match VL
+
+            if SINGLE_COUNTY_OUTPUT_DIR:
+                # script_filepath = output_dir / file_with_state
+                script_filepath = output_docxs_dir / file_with_state
+            else:
+                state_county_dir = output_dir / state_fn  # added BEK 4/23/22 to use filename var
+                if not state_county_dir.exists():
+                    state_county_dir.mkdir()
+                script_filepath = state_county_dir / file_with_state
+
+            script.save(script_filepath)
+
+        if True:  # convert docxs to pdfs
+            if not SINGLE_COUNTY_OUTPUT_DIR:
+                logger.debug("ready to sleep/pause")
+                # time.sleep(2)  # Dropbox needs time to update or Word bombs
+                logger.debug(f"calling convert on '{file_with_state}'")
+                # pyautobek.alert("ready to call convert", "Alert")
+                convert(state_county_dir)  # this converts all docx files in the folder to pdf using docs2pdf function
+                logger.debug("after convert")
+                # pyautobek.alert("after convert", "Alert")
+
+        count += 1
+        msg = f"Finished filling Word templates for {state_fn}. Completed {count} of {used_counties_df.shape[0]} " \
+              f"chosen counties."
+        logger.info(msg)
+
+    if True and SINGLE_COUNTY_OUTPUT_DIR:  # convert docxs to pdfs
+        logger.debug("ready to sleep/pause")
+        # time.sleep(2)  # Dropbox needs time to update or Word bombs
+        logger.debug(f"calling convert on all docxs in Output directory")
+        # pyautobek.alert("ready to call convert", "Alert")
+        convert(output_docxs_dir, output_pdfs_dir)  # this converts all docx files in the folder to pdf using docs2pdf function
+        logger.debug("after convert")
+        # pyautobek.alert("after convert", "Alert")
+
+    msg = f"Completed scripts and Avery sheets for {count} counties total."
+    logger.info(msg)
+    # messagebox was throwing an unsolvable SIGSEGV error (ie in the C code) so use msgbox
+    # messagebox.showinfo("Finished", msg1)
+    pyautobek.alert(msg, "Alert")
+
+
+def main():
+    """ pick function from menu """
+
+    # choice = text_box("What do you want to do?", title='Select',
+    #                   buttons=['LeviTool', 'Check Urls', 'Check Short Urls', 'Max Row Len', 'Exit'])
+
+    choice = pyautobek.confirm("What do you want to do?", title='Select',
+                      buttons=['LeviTool', 'Check Urls', 'Check Short Urls', 'Max Row Len', 'Exit'])
+    choice = choice.lower()
+
+
+    if choice == 'levitool':
+        main_levi()
+    elif choice == 'check urls':
+        check_boe_urls(key_containing_url=None, key_for_used=None, open_browser=None)
+    elif choice == 'check short urls':
+        check_short_boe_urls(key_containing_short_url=None, key_containing_url=None, key_for_used=None,
+                             open_browser=None)
+    elif choice == 'max row len':
+        max_label_lengths(initial_attachment_dir=INITIAL_ATTACHMENT_DIR)
+    else:
+        exit()
+
+
+if __name__ == '__main__':
+    # main_levi()
+    main()
