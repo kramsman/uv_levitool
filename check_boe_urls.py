@@ -1,10 +1,9 @@
 
-
 from pathlib import Path
 from loguru import logger
 from uvbekutils import select_file
-from uvbekutils import get_file_name
-from uvbekutils import setup_loguru, exit_yes, select_from_list, text_box
+# from uvbekutils import get_file_name
+from uvbekutils import setup_loguru, exit_yes, select_from_list, text_box, list_pick
 import webbrowser
 
 ATTACHMENTS_INITIAL_DIR = Path("~/Dropbox/Postcard Files/Attachments/Campaigns").expanduser()
@@ -57,7 +56,7 @@ def get_browser_option(open_browser):
 
     from uvbekutils import exit_yes
 
-    if open_browser is None or open_browser.lower() not in ['no', 'error', 'all']:
+    if open_browser is True or open_browser.lower() not in ['no', 'error', 'all']:
         # open browser for urls to manually review each one?
         open_browser = text_box("Do you want to open a browser window for urls?",
                                 box_title='Open browser?',
@@ -72,7 +71,7 @@ def get_browser_option(open_browser):
     return open_browser.lower()
 
 
-def check_boe_urls(key_containing_url=None, key_for_used=None, open_browser=None, boe_xls=None):
+def check_boe_urls(key_containing_url=None, key_for_used=None, open_browser=False, boe_xls=None):
     """ read the urls being used in scripts from a BOE file and list the inactive ones, open the active so they can
         be reviewed
 
@@ -97,7 +96,7 @@ def check_boe_urls(key_containing_url=None, key_for_used=None, open_browser=None
             files_like="*.xlsx",
             choices=["Select", "Cancel"],
             mode="file",  # file, dir or both
-            title2="Will be in the INPUT subdirectory"
+            title2="Will be in an INPUT subdirectory"
         )
         print(f"Selected: {boe_xls}")
 
@@ -107,7 +106,12 @@ def check_boe_urls(key_containing_url=None, key_for_used=None, open_browser=None
 
     # get key like '{url}' if not passed
     if key_containing_url is None:
-        key_containing_url = select_from_list(county_sheet_keys, 'Select tag for url field', select_type='radio')
+        # key_containing_url = select_from_list(county_sheet_keys, 'Select tag for url field', select_type='radio')
+        key_containing_url = list_pick(county_sheet_keys,
+                                       'Select tag for url field',
+                                       "Select tag for url field, common choice is '{url}'",
+                                       select_mode='single',
+                                       pre_select=False)[0]
     # make sure it's on file
     key_containing_url = key_containing_url.lower()
     logger.info(f"Key field being checked is '{key_containing_url}'")
@@ -117,12 +121,19 @@ def check_boe_urls(key_containing_url=None, key_for_used=None, open_browser=None
 
     # get key like '{priority}' if not passed
     if key_for_used is None:
-        key_for_used = select_from_list(county_sheet_keys,
-                                        'Select tag to id counties being used (None for all)',
-                                        select_type='radio')
+        # key_for_used = select_from_list(county_sheet_keys,
+        #                                 'Select tag to id counties being used (None for all)',
+        #                                 select_type='radio')
+        key_for_used = list_pick(county_sheet_keys,
+                                 'Select Field',
+                                 "Select tag to id counties being used (often '{priority}', None for all)",
+                                 select_mode='single',
+                                 pre_select=False)[0]
+
+    # not selecting anything above will return a blank string
     # Can set to None after we know to use all and not prompt
-    if key_for_used == 'all':
-        key_for_used = None
+    # if key_for_used == 'all':
+    #     key_for_used = None
 
     # make sure key is on file
     if key_for_used is not None:  # None ok from select = all so have to check
@@ -135,10 +146,10 @@ def check_boe_urls(key_containing_url=None, key_for_used=None, open_browser=None
 
     # if a field is specified to identify used rows (those we are interested in) then filter the df
     if key_for_used:
-        county_sheet_df = county_sheet_df.loc[county_sheet_df[key_for_used] != 'nan']
+        county_sheet_df = county_sheet_df.loc[county_sheet_df[key_for_used].notnull()]
 
     # now filter to take only rows where our url field is not blank
-    county_sheet_df = county_sheet_df.loc[county_sheet_df[key_containing_url] != 'nan']
+    county_sheet_df = county_sheet_df.loc[county_sheet_df[key_containing_url].notnull()]
 
     # get df of rows with unique county and url (take only the first url/county combination if multiple. Should be ok
     # cause multiple urls should be the generic)
@@ -155,7 +166,7 @@ def check_boe_urls(key_containing_url=None, key_for_used=None, open_browser=None
         else:
             logger.info(f"Error with:'{url}', '{url_error(url)}'")
 
-        if open_browser == 'all':
+        if open_browser == True:
             webbrowser.open(url, new=2)
             if url_error(url) is not None:
                 webbrowser.open(f"https://www.google.com/search?q={row['{state}']} {row['{cntytoprint}']} "
@@ -166,9 +177,9 @@ def check_boe_urls(key_containing_url=None, key_for_used=None, open_browser=None
                             f"board of elections", new=2)
 
 
-def check_short_boe_urls(key_containing_short_url=None, key_containing_url=None, key_for_used=None, open_browser=None, 
+def check_short_boe_urls(key_containing_short_url=None, key_containing_url=None, key_for_used=None, open_browser=None,
                          boe_xls=None):
-    """ read the sort urls being used in scripts and url they should represent from a BOE file 
+    """ read the sort urls being used in scripts and url they should represent from a BOE file
     and make sure they match. if not, short url needs to point to different url.
 
     Args:
@@ -186,33 +197,52 @@ def check_short_boe_urls(key_containing_short_url=None, key_containing_url=None,
         #                          initial_dir=ATTACHMENTS_INITIAL_DIR,
         #                          title2="Pick BOE file (xlsx)")
 
-        boe_xls = select_file(
-            title="Pick BOE file (xlsx) with urls to check.",
-            start_dir=ATTACHMENTS_INITIAL_DIR,
-            files_like="*.xlsx",
-            choices=["Select", "Cancel"],
-            mode="file",  # file, dir or both
-            title2="Will be in the INPUT subdirectory"
-        )
+        if False:  # not hardcoded
+            boe_xls = select_file(
+                title="Pick BOE file (xlsx) with urls to check.",
+                start_dir=ATTACHMENTS_INITIAL_DIR,
+                files_like="*.xlsx",
+                choices=["Select", "Cancel"],
+                mode="file",  # file, dir or both
+                title2="Will be in the INPUT subdirectory"
+            )
+        else:
+            boe_xls = '/Users/Denise/Library/CloudStorage/Dropbox/Postcard Files/Attachments/Campaigns/Test box and image/Input/BOE Info FL.xlsx'
+
     logger.info(f"BOE xls being checked is: '{boe_xls}")
 
     county_sheet_keys, county_sheet_df = read_boe_xls(boe_xls)
 
     # for short url get key like '{url}' if not passed
     if key_containing_short_url is None:
-        key_containing_short_url = select_from_list(county_sheet_keys, 'Select tag for short url field to be checked',
-                                                    select_type='radio')
+        # key_containing_short_url = select_from_list(county_sheet_keys, 'Select tag for short url field to be checked',
+        #                                             select_type='radio')
+        key_containing_short_url = list_pick(county_sheet_keys,
+                                             'Select tag',
+                                             "Select tag for short url field to be checked (usually '{shorturl}' or "
+                                             "'{bitlyurl}')",
+                                             select_mode='single',
+                                             pre_select=False,
+                                             allow_none=False,
+                                             )[0]
     # make sure it's on file
     key_containing_short_url = key_containing_short_url.lower()
     logger.info(f"Key field being checked is '{key_containing_short_url}'")
     # make sure key is on file
     if key_containing_short_url not in county_sheet_keys:
         exit_yes(f"Url key '{key_containing_short_url}' not in county keys: \n\n{', '.join(county_sheet_keys)}")
-        
+
     # for comparison url get key like '{url}' if not passed
     if key_containing_url is None:
-        key_containing_url = select_from_list(county_sheet_keys, 'Select tag for url field to match',
-                                              select_type='radio')
+        # key_containing_url = select_from_list(county_sheet_keys, 'Select tag for url field to match',
+        #                                       select_type='radio')
+        key_containing_url = list_pick(county_sheet_keys,
+                                     'Select tag',
+                                     "Select tag for url field to match, often '{url}'",
+                                     select_mode='single',
+                                     pre_select=False,
+                                        allow_none=False,
+                                       )[0]
     # make sure it's on file
     key_containing_url = key_containing_url.lower()
     logger.info(f"Key field being checked is '{key_containing_url}'")
@@ -222,26 +252,34 @@ def check_short_boe_urls(key_containing_short_url=None, key_containing_url=None,
 
     # get key like '{priority}' if not passed
     if key_for_used is None:
-        key_for_used = select_from_list(county_sheet_keys,
-                                        'Select tag to id counties being used (None for all)',
-                                        select_type='radio')
+        # key_for_used = select_from_list(county_sheet_keys,
+        #                                 'Select tag to id counties being used (None for all)',
+        #                                 select_type='radio')
+        key_for_used = list_pick(county_sheet_keys,
+                                             'Select tag',
+                                             "Select tag to id counties being used (often '{priority},'None for all "
+                                             "counties)",
+                                             select_mode='single',
+                                             pre_select=False,
+                                            allow_none=True,
+                                             )[0]
     # Can set to None after we know to use all and not prompt
-    if key_for_used == 'all':
-        key_for_used = None
+    # if key_for_used == 'all':
+    #     key_for_used = None
 
     # make sure key is on file
-    if key_for_used is not None:  # None ok from select = all so have to check
+    if key_for_used is not None and key_for_used is not '':  # None ok from select = all so have to check
         key_for_used = key_for_used.lower()
         if key_for_used not in county_sheet_keys:
             exit_yes(f"Key 'for used' '{key_for_used}' not in county keys: \n\n{', '.join(county_sheet_keys)}")
     logger.info(f"Key field being used to limit counties is '{key_for_used}'")
 
     # if a field is specified to identify used rows (those we are interested in) then filter the df
-    if key_for_used:
-        county_sheet_df = county_sheet_df.loc[county_sheet_df[key_for_used] != 'nan']
+    if key_for_used is not None and key_for_used is not '':
+        county_sheet_df = county_sheet_df.loc[county_sheet_df[key_for_used].notnull()]
 
-    # now filter to take only rows where our url field is not blank
-    county_sheet_df = county_sheet_df.loc[county_sheet_df[key_containing_short_url] != 'nan']
+    # only rows where our url field is not blank
+    county_sheet_df = county_sheet_df.loc[county_sheet_df[key_containing_short_url].notnull()]
 
     # get df of rows with unique county and url (take only the first url/county combination if multiple. Should be ok
     # cause multiple urls should be the generic)
@@ -266,6 +304,7 @@ def check_short_boe_urls(key_containing_short_url=None, key_containing_url=None,
             logger.error(f"Comparison is:'{final_url(url)}'")
             logger.error("")
             a = 1
+    a = 1
 
 
 if __name__ == '__main__':

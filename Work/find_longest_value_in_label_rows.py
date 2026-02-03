@@ -65,7 +65,7 @@ def max_label_lengths(*, used_field: str = '{priority}', label_docx = None, init
     from loguru import logger
     import re
     import glob
-    from bekutils import get_file_name, setup_loguru, exit_yes, select_from_list, text_box
+    from uvbekutils import setup_loguru, exit_yes, select_from_list, text_box, select_file
 
     from Work.read_boe_xls import read_boe_xls
 

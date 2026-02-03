@@ -7,18 +7,11 @@ A pdf of each 'docx' is created after the merge.
 A separate subdirectory under a min directory named "Output" is created for each used row in the input xlsx file.
 """
 
-# Started as Filltemplate5.py
 # NEED TO USE BACK VERSION OF OPENPYXL for bug caused in 3.1: county_sheet_df = pd.ExcelFile( script_file_name).parse(
-# sheet_name='Counties', nrows=1)
-# 7/24/23 Changed deprecated and removed series.iteritems to series.items in 1 line
-# 1/31/24 Renamed LeviToolWin5.0.py to LeviTool.py and started git
-# done 2/1/24 strip values to be replaced.  Tab or pads on phone or county creates off center labels and could run over.
-#   sb fixed by reading in county sheet w astype(str): errors if val is not a string (eg blank = nan for {url})
-#   stripped vals to remove unseen chars on phone/county when reading in county sheet
 # use openpyxl 3.0.10 not 3.1.2 because later bombs if xlsx has filters  https://stackoverflow.com/questions/75382340/python-pandas-read-excel-error-value-must-be-either-numerical-or-a-string-conta
 
-
-#TODO currently blanks replaced with "' '" in df used_counties_df.  OK or should be blank? Or '.'?
+# TODO currently blanks replaced with "' '" in df used_counties_df.  OK or should be blank? Or '.'?
+# TODO Check max length of fields not working. But it's in another ersion - levitool in non ROV Python?
 
 import subprocess
 subprocess.run(["uv", "add", "python-docx"], check=True)
@@ -30,8 +23,7 @@ from copy import deepcopy
 from pathlib import Path
 
 import pandas as pd
-# import pymsgbox
-from uvbekutils import exit_yes, exit_yes_no, get_dir_name, setup_loguru, text_box, select_file
+from uvbekutils import exit_yes, exit_yes_no, setup_loguru, select_file
 from uvbekutils import pyautobek
 from check_boe_urls import check_boe_urls, check_short_boe_urls
 from docx import Document  # package in Conda is python-docx, not simply docx
@@ -151,12 +143,6 @@ def main_levi():
         exit_yes_no(f"{msg1}\n\n\n{df_string}\n\n", box_title)
 
     if True:
-        # Select input dir: True via dialog; False hardcoded
-        # path_input = get_dir_name("Pick 'Input' Directory",
-        #                            "Select the directory containing the input files for LeviTool (eg .../GA "
-        #                            "files/Input')",
-        #                            INITIAL_ATTACHMENT_DIR)
-
         path_input = select_file(
             title="Pick 'Input' Directory",
             start_dir=INITIAL_ATTACHMENT_DIR,
@@ -318,9 +304,6 @@ def main_levi():
     logger.debug("checking nans")
     nan_in_df = used_counties_df[used_counties_df.isnull().any(axis=1)]
     if not nan_in_df.empty:
-        # prompt_for_df_values(nan_in_df,
-        #                      "Some records contain missing ('nan') values that will be replaced in docxs:",
-        #                      "OK to Substitute Missing Values ('nan's)?")
         print(f"\nUSED COUNTIES CONTAINING 'nan' DATA")
         with pd.option_context('display.max_rows', None, 'display.max_columns', None):
             print(nan_in_df)
@@ -332,9 +315,6 @@ def main_levi():
         used_counties_df.eq("' '").any(axis=1)]  # all fields replaced with stripped val then ' '  above to see
 
     if not blank_in_df.empty:
-        # prompt_for_df_values(blank_in_df,
-        #                      "Some records contain missing blank values that will be replaced in docxs:",
-        #                      "OK to Substitute Blank Values?")
         print(f"\nUSED COUNTIES CONTAINING DATA WITH SPACES")
         with pd.option_context('display.max_rows', None, 'display.max_columns', None):
             print(blank_in_df[list(keys_in_doc)])
@@ -382,12 +362,10 @@ def main_levi():
         if True:  # convert docxs to pdfs
             if not SINGLE_COUNTY_OUTPUT_DIR:
                 logger.debug("ready to sleep/pause")
-                # time.sleep(2)  # Dropbox needs time to update or Word bombs
+                # time.sleep(2)  # No longer - Dropbox needs time to update or Word bombs
                 logger.debug(f"calling convert on '{file_with_state}'")
-                # pyautobek.alert("ready to call convert", "Alert")
                 convert(state_county_dir)  # this converts all docx files in the folder to pdf using docs2pdf function
                 logger.debug("after convert")
-                # pyautobek.alert("after convert", "Alert")
 
         count += 1
         msg = f"Finished filling Word templates for {state_fn}. Completed {count} of {used_counties_df.shape[0]} " \
@@ -396,35 +374,27 @@ def main_levi():
 
     if True and SINGLE_COUNTY_OUTPUT_DIR:  # convert docxs to pdfs
         logger.debug("ready to sleep/pause")
-        # time.sleep(2)  # Dropbox needs time to update or Word bombs
+        # time.sleep(2)  # No longer - Dropbox needs time to update or Word bombs
         logger.debug(f"calling convert on all docxs in Output directory")
-        # pyautobek.alert("ready to call convert", "Alert")
         convert(output_docxs_dir, output_pdfs_dir)  # this converts all docx files in the folder to pdf using docs2pdf function
         logger.debug("after convert")
-        # pyautobek.alert("after convert", "Alert")
 
     msg = f"Completed scripts and Avery sheets for {count} counties total."
     logger.info(msg)
-    # messagebox was throwing an unsolvable SIGSEGV error (ie in the C code) so use msgbox
-    # messagebox.showinfo("Finished", msg1)
     pyautobek.alert(msg, "Alert")
 
 
 def main():
     """ pick function from menu """
 
-    # choice = text_box("What do you want to do?", title='Select',
-    #                   buttons=['LeviTool', 'Check Urls', 'Check Short Urls', 'Max Row Len', 'Exit'])
-
     choice = pyautobek.confirm("What do you want to do?", title='Select',
                       buttons=['LeviTool', 'Check Urls', 'Check Short Urls', 'Max Row Len', 'Exit'])
     choice = choice.lower()
 
-
     if choice == 'levitool':
         main_levi()
     elif choice == 'check urls':
-        check_boe_urls(key_containing_url=None, key_for_used=None, open_browser=None)
+        check_boe_urls(key_containing_url=None, key_for_used=None, open_browser=True)
     elif choice == 'check short urls':
         check_short_boe_urls(key_containing_short_url=None, key_containing_url=None, key_for_used=None,
                              open_browser=None)
