@@ -307,6 +307,6 @@ if __name__ == '__main__':
     #                boe_xls=Path("~/Dropbox/Postcard Files/Attachments/Campaigns/VA Primary 1-2024/Input/BOE Info VA.xlsx").expanduser(),)
     # check_short_boe_urls(key_containing_short_url=None, key_containing_url=None, key_for_used='all', open_browser=False,
     #                boe_xls=Path("~/Dropbox/Postcard Files/PythonPrograms/Development/LeviTool/Work/TEST BOE Info VA.xlsx").expanduser(),)
-    # check_boe_urls(key_containing_url='{specificurl}', key_for_used='{use}', open_browser='All',
-    #                boe_xls=Path("~/Dropbox/Postcard Files/PythonPrograms/Development/LeviTool/Work/TEST BOE Info VA.xlsx").expanduser())
-    check_short_boe_urls(open_browser=True)
+    check_boe_urls(key_containing_url='{specificurl}', key_for_used='{use}', open_browser='All',
+                   boe_xls=Path("~/Dropbox/Postcard Files/PythonPrograms/Development/LeviTool/Work/TEST BOE Info VA.xlsx").expanduser())
+    # check_short_boe_urls(open_browser=True)
