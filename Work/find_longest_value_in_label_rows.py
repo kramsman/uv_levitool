@@ -70,6 +70,7 @@ def max_label_lengths(*, used_field: str = '{priority}', label_docx = None, init
     from Work.read_boe_xls import read_boe_xls
 
     if label_docx is None:
+        # FIXME remove get_file_name use select_file
         label_docx = get_file_name("PICK LABEL DOCX",
                                  initial_dir=initial_attachment_dir,
                                  title2="Pick label docx template that will have BOE info merged into it "
@@ -81,6 +82,7 @@ def max_label_lengths(*, used_field: str = '{priority}', label_docx = None, init
     keys = find_keys_in_text(label_text)
     keys = [key.lower() for key in keys]
 
+    # FIXME should tis be live?
     # if boe_xls is None:
     #     boe_xls = get_file_name("Pick BOE file (xlsx) with urls to check.",
     #                              initial_dir=label_docx.parent,

@@ -13,6 +13,14 @@ def read_boe_xls(boe_xls_file, key_check_list=None, display_keys=False):
             key_count (): number of key_str found
             oper (): comparison passed as function from operator module eg operator.gt.  https://stackoverflow.com/questions/18591778/how-to-pass-an-operator-to-a-python-function
             num_allowed (): comparison value
+            :param key_str:
+            :type key_str:
+            :param key_count:
+            :type key_count:
+            :param oper:
+            :type oper:
+            :param num_allowed:
+            :type num_allowed:
         """
 
         if not oper(key_count, num_allowed):
