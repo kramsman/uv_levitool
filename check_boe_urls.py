@@ -1,8 +1,12 @@
 
 from pathlib import Path
 from loguru import logger
+from uvbekutils import scroll_box
 from uvbekutils import select_file
-from uvbekutils import setup_loguru, exit_yes, select_from_list, text_box, list_pick
+from uvbekutils import setup_loguru, exit_yes, select_from_list, list_pick
+# from uvbekutils import text_box
+from uvbekutils import pyautobek
+
 import webbrowser
 
 ATTACHMENTS_INITIAL_DIR = Path("~/Dropbox/Postcard Files/Attachments/Campaigns").expanduser()
@@ -58,15 +62,21 @@ def get_browser_option(open_browser):
 
     if open_browser is True or open_browser.lower() not in ['no', 'error', 'all']:
         # open browser for urls to manually review each one?
-        open_browser = text_box("Do you want to open a browser window for urls?",
-                                box_title='Open browser?',
+        # open_browser = text_box("Do you want to open a browser window for urls?",
+        #                         box_title='Open browser?',
+        #                         buttons=['No', 'Error', 'All', 'Exit'])
+        open_browser = pyautobek.confirm("Do you want to open a browser window for urls?",
+                                'Open browser?',
                                 buttons=['No', 'Error', 'All', 'Exit'])
         if open_browser == 'exit':
             exit_yes("exit picked")
         # best to open a fresh window because so many tabs are tough to clean up individually
         if open_browser != 'no':
-            text_box("Best to open a fresh browser window now.  Continue?",
-                                    box_title='Open Window',
+            # text_box("Best to open a fresh browser window now.  Continue?",
+            #          box_title='Open Window',
+            #          buttons=['Yes'])
+            pyautobek.confirm("Best to open a fresh browser window now.  Continue?",
+                                    'Open Window',
                                     buttons=['Yes'])
     return open_browser.lower()
 

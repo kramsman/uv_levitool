@@ -388,7 +388,7 @@ def main():
     """ pick function from menu """
 
     choice = pyautobek.confirm("What do you want to do?", title='Select',
-                      buttons=['LeviTool', 'Check Urls', 'Check Short Urls', 'Max Row Len', 'Exit'])
+                      buttons=['LeviTool', 'Max Row Len', 'Check Urls', 'Check Short Urls', 'Exit'])
     choice = choice.lower()
 
     if choice == 'levitool':

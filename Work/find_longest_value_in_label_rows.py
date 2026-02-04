@@ -7,6 +7,7 @@ from docx import Document  # package in Conda is python-docx, not simply docx
 # import pymsgbox
 from uvbekutils import exit_yes
 from uvbekutils import pyautobek
+from uvbekutils import safe_str
 
 def get_label_text(label_docx):
     """ get text from upper leftmost cell of label and return a text string with lines separated by '\n'"""
@@ -71,10 +72,17 @@ def max_label_lengths(*, used_field: str = '{priority}', label_docx = None, init
 
     if label_docx is None:
         # FIXME remove get_file_name use select_file
-        label_docx = get_file_name("PICK LABEL DOCX",
-                                 initial_dir=initial_attachment_dir,
+        # label_docx = get_file_name("PICK LABEL DOCX",
+        #                          initial_dir=initial_attachment_dir,
+        #                          title2="Pick label docx template that will have BOE info merged into it "
+        #                                 "('LABEL 30 per page...')")
+        label_docx = select_file("PICK LABEL DOCX",
+                                 start_dir=initial_attachment_dir,
+                                 files_like='*.docx',
+                                 mode='file',
                                  title2="Pick label docx template that will have BOE info merged into it "
-                                        "('LABEL 30 per page...')")
+                                        "('LABEL 30 per page...')",
+                                 )
     logger.info(f"Label docx being used for input: '{label_docx}")
     label_docx = Path(label_docx).expanduser()
 
@@ -112,7 +120,7 @@ def max_label_lengths(*, used_field: str = '{priority}', label_docx = None, init
             # replace occurrences of the key with the value in the df (ex '{county}' gets replaced with 'Dade')
             # tmp_label_text = tmp_label_text.replace(fld, df.at[index, fld])
             # TODO what ot do if nan?  takes up only one space but might be much larger when filled in later.
-            tmp_label_text = re.sub(fld, df.at[index, fld], tmp_label_text, flags=re.IGNORECASE)
+            tmp_label_text = re.sub(fld, safe_str(df.at[index, fld]), tmp_label_text, flags=re.IGNORECASE)
 
         line_list = tmp_label_text.split('\n')  # create list of lines from the text
         line_list = [line.strip('\t ') for line in line_list if len(line.strip('\t ')) > 0]  # trim and remove blanks
