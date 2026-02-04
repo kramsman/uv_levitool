@@ -1,10 +1,10 @@
 """ Check the lengths of row text in a label after Levitool substitutions to make sure it will fit.
 Should be max of 34.
 """
-import pandas
+from pathlib import Path
+import pandas as pd
 from copy import deepcopy
 from docx import Document  # package in Conda is python-docx, not simply docx
-# import pymsgbox
 from uvbekutils import exit_yes
 from uvbekutils import pyautobek
 from uvbekutils import safe_str
@@ -21,8 +21,8 @@ def get_label_text(label_docx):
     label_text = '\n'.join(lines)
     # line = d.tables[0].rows[0].cells[0].paragraphs[0]
     print(f"{label_text=}")
-
     return label_text
+
 
 def max_label_lengths(*, used_field: str = '{priority}', label_docx = None, initial_attachment_dir = None) -> None:
     """
@@ -38,28 +38,6 @@ def max_label_lengths(*, used_field: str = '{priority}', label_docx = None, init
         return chars.  ASSUMED TO BE NAMED label.txt IN SAME DIR AS BOE xlsx
         used_field (): field which represents used records in df, usually '{PRIORITY}'
     """
-    def print_max_line_info(df:pandas.DataFrame, line_list_field:str):
-        """
-        Calculates the longest line from a df cell containing a list of the substituted text, its length and prints
-        them.
-
-        Args:
-            df (): df with field info to be substituted in label text
-            line_list_field (): the field in df which contains a list of the lines with text substituted
-        """
-        # get number of list elements (# of lines) in the list field, so we know how many lines need to be checked
-        number_of_lines = len(df[line_list_field].iloc[0])
-
-        for line_number in range(number_of_lines):
-            line_data = [line[line_number] for line in df[line_list_field]]
-            max_line = max(line_data, key=len)
-            max_line_length = len(max_line)
-            # print(f"line_data: {line_data}")
-            print(f"line {line_number+1} max_line: '{max_line}', len:{max_line_length}")
-            # if max_line_length > 34:  # TODO not good because shows even for all rows, not just {priority} set
-            #     pyautobek.alert(f"max_line: '{max_line}', len:{max_line_length} is over 34 characters. \n\nSee log.",
-            #                    "FIELD MAY BE TOO LONG")
-
 
     import pandas as pd
     from pathlib import Path
@@ -69,6 +47,36 @@ def max_label_lengths(*, used_field: str = '{priority}', label_docx = None, init
     from uvbekutils import setup_loguru, exit_yes, select_from_list, text_box, select_file
 
     from Work.read_boe_xls import read_boe_xls
+
+    def print_max_line_info(df:pd.DataFrame, line_list_field:str) -> str:
+        """
+        Calculates the longest line from a df cell containing a list of the substituted text, its length and prints
+        them.
+
+        Args:
+            df (): df with field info to be substituted in label text
+            line_list_field (): the field in df which contains a list of the lines with text substituted
+
+        Returns:
+            str: formatted string with max line info for each line
+        """
+        # get number of list elements (# of lines) in the list field, so we know how many lines need to be checked
+        number_of_lines = len(df[line_list_field].iloc[0])
+
+        result_lines = []
+        for line_number in range(number_of_lines):
+            line_data = [line[line_number] for line in df[line_list_field]]
+            max_line = max(line_data, key=len)
+            max_line_length = len(max_line)
+            # print(f"line_data: {line_data}")
+            line_info = f"line {line_number+1} max_line: '{max_line}', len:{max_line_length}"
+            print(line_info)
+            result_lines.append(line_info)
+            # if max_line_length > 34:  # TODO not good because shows even for all rows, not just {priority} set
+            #     pyautobek.alert(f"max_line: '{max_line}', len:{max_line_length} is over 34 characters. \n\nSee log.",
+            #                    "FIELD MAY BE TOO LONG")
+        return '\n'.join(result_lines)
+
 
     if label_docx is None:
         # FIXME remove get_file_name use select_file
@@ -122,11 +130,14 @@ def max_label_lengths(*, used_field: str = '{priority}', label_docx = None, init
             # TODO what ot do if nan?  takes up only one space but might be much larger when filled in later.
             tmp_label_text = re.sub(fld, safe_str(df.at[index, fld]), tmp_label_text, flags=re.IGNORECASE)
 
-        line_list = tmp_label_text.split('\n')  # create list of lines from the text
+        line_list = safe_str(tmp_label_text).split('\n')  # create list of lines from the text
         line_list = [line.strip('\t ') for line in line_list if len(line.strip('\t ')) > 0]  # trim and remove blanks
 
         # fill a field in the df with the list of line text
         df.at[index, 'lines'] = line_list
+
+    # Collect max line info for alert display
+    max_line_results = []
 
     # Below is True if 'nan' found in any cell in 'keys' columns
     nan_found_in_all_rows = (df[keys] == 'nan').any(axis="columns").any(axis="rows")
@@ -151,12 +162,14 @@ def max_label_lengths(*, used_field: str = '{priority}', label_docx = None, init
             print(df_non_nan[keys])
             print()
             print("MAX LINES IN SUBSTITUTED SCRIPT INFO FOR ALL ROWS WITH NO NAN VALUES")
-            print_max_line_info(df_non_nan, 'lines')
+            result = print_max_line_info(df_non_nan, 'lines')
+            max_line_results.append(("ALL ROWS WITH NO NAN VALUES", result))
         print()
         a=1
     else:
         print("MAX LINES IN SUBSTITUTED SCRIPT INFO FOR ALL ROWS")
-        print_max_line_info(df, 'lines')
+        result = print_max_line_info(df, 'lines')
+        max_line_results.append(("ALL ROWS", result))
         print()
 
     # see explanation of expression above
@@ -177,27 +190,40 @@ def max_label_lengths(*, used_field: str = '{priority}', label_docx = None, init
     else:
         print(f"MAX LINES IN SUBSTITUTED SCRIPT INFO FOR USED SUB ROWS ('{used_field}' not blank)")
         df_used_counties = df.loc[df[used_field].str.strip() != 'nan']
-        print_max_line_info(df_used_counties, 'lines')
+        result = print_max_line_info(df_used_counties, 'lines')
+        max_line_results.append((f"USED SUB ROWS ('{used_field}' not blank)", result))
         print()
 
     print("RAW LABEL DATA:")
     print(label_text)
+
+    # Build and display alert with max line lengths and label text
+    alert_lines = []
+    alert_lines.append("SAMPLE LABEL TEXT:")
+    alert_lines.append(label_text)
+    alert_lines.append("")
+    for section_name, section_result in max_line_results:
+        alert_lines.append(f"--- {section_name} ---")
+        alert_lines.append(section_result)
+        alert_lines.append("")
+    alert_message = '\n'.join(alert_lines)
+    pyautobek.alert(alert_message, "MAX LABEL LINE LENGTHS")
 
 
 def find_keys_in_text(label_text):
     """ Finds keys, fields in document to be replaced, in flat text"""
 
     import re
-    keys = set(re.findall(r'{[a-zA-Z0-9]+}', label_text))
+    keys = set(re.findall(r'{[a-zA-Z0-9]+}', safe_str(label_text)))
     return keys
 
 
 if __name__ == '__main__':
-    from pathlib import Path
-    import pandas as pd
 
     INITIAL_ATTACHMENT_DIR = Path("~/Dropbox/Postcard Files/Attachments/Campaigns").expanduser()
+    max_label_lengths(initial_attachment_dir=INITIAL_ATTACHMENT_DIR,)
 
+    a=1
     # Label text is copied here.  Lines are trimmed.
     #     LABEL_TEXT = """
     # {cntytoprint} Registrar
@@ -223,6 +249,7 @@ if __name__ == '__main__':
     max_label_lengths(initial_attachment_dir=INITIAL_ATTACHMENT_DIR,)
                       # label_docx="~/Dropbox/Postcard Files/Attachments/Campaigns/TEST NAN3/Input/TEST Special GOTV "
                       #            "LABELS-30per page 1-3-2023.docx")
+    a = 1
 
     # boe_xls = "~/Dropbox/Postcard Files/Attachments/Campaigns/TEST NAN3/Input/BOE Info VA (1).xlsx",
 
@@ -287,4 +314,4 @@ if __name__ == '__main__':
 #     #     max_field = max(df['line'][entry], key=len)
 #     #     print(f"Max of '{field}' column: '{max_field}', length is {len(max_field)}")
 #
-#     # a=1
+    a=1
