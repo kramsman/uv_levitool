@@ -206,6 +206,34 @@ def max_label_lengths(*, used_field: str = '{priority}', label_docx = None, init
         alert_lines.append(f"--- {section_name} ---")
         alert_lines.append(section_result)
         alert_lines.append("")
+
+    # Add font size reference tables
+    alert_lines.append("")
+    alert_lines.append("")
+    alert_lines.append("Estimated character limits")
+    alert_lines.append("")
+    alert_lines.append("30 per page, Avery 5161 Label")
+    alert_lines.append("Font Size | Approximate Characters per Line")
+    alert_lines.append("----------|--------------------------------")
+    alert_lines.append("8 pt      | 52-55 characters")
+    alert_lines.append("9 pt      | 46-49 characters")
+    alert_lines.append("10 pt     | 42-45 characters")
+    alert_lines.append("11 pt     | 38-41 characters")
+    alert_lines.append("12 pt     | 35-38 characters")
+    alert_lines.append("13 pt     | 32-35 characters")
+    alert_lines.append("14 pt     | 30-33 characters")
+    alert_lines.append("")
+    alert_lines.append("20 per page, Avery 5161 Label")
+    alert_lines.append("Font Size | Approximate Characters per Line")
+    alert_lines.append("----------|--------------------------------")
+    alert_lines.append("8 pt      | 80-85 characters")
+    alert_lines.append("9 pt      | 71-76 characters")
+    alert_lines.append("10 pt     | 64-68 characters")
+    alert_lines.append("11 pt     | 58-62 characters")
+    alert_lines.append("12 pt     | 53-57 characters")
+    alert_lines.append("13 pt     | 49-52 characters")
+    alert_lines.append("14 pt     | 46-49 characters")
+
     alert_message = '\n'.join(alert_lines)
     pyautobek.alert(alert_message, "MAX LABEL LINE LENGTHS")
 
@@ -221,6 +249,8 @@ def find_keys_in_text(label_text):
 if __name__ == '__main__':
 
     INITIAL_ATTACHMENT_DIR = Path("~/Dropbox/Postcard Files/Attachments/Campaigns").expanduser()
+    # LENGTH_CHECK_FIELDS_SELECT = '{priority}'
+    LENGTH_CHECK_FIELDS_SELECT = '{use}'
     max_label_lengths(initial_attachment_dir=INITIAL_ATTACHMENT_DIR,)
 
     a=1
@@ -232,24 +262,47 @@ if __name__ == '__main__':
     # Early Voting Now thru Feb 18
     #     """
 
+    # 30 per page, Avery 5161 Label
+    # Font Size | Approximate Characters per Line
+    # ----------|--------------------------------
+    # 8 pt      | 52-55 characters
+    # 9 pt      | 46-49 characters
+    # 10 pt     | 42-45 characters
+    # 11 pt     | 38-41 characters
+    # 12 pt     | 35-38 characters
+    # 13 pt     | 32-35 characters
+    # 14 pt     | 30-33 characters
+
+    # 20 per page, Avery 5161 Label
+    # Font Size | Approximate Characters per Line
+    # ----------|--------------------------------
+    # 8 pt      | 80-85 characters
+    # 9 pt      | 71-76 characters
+    # 10 pt     | 64-68 characters
+    # 11 pt     | 58-62 characters
+    # 12 pt     | 53-57 characters
+    # 13 pt     | 49-52 characters
+    # 14 pt     | 46-49 characters
+
+
     # label_text_file = Path("~/Dropbox/Postcard Files/Attachments/Campaigns/TEST NAN3/Input/label.txt").expanduser()
     # with open(label_text_file, "r") as f:
     #     LABEL_TEXT = f.read()
 
-    LENGTH_CHECK_FIELDS_SELECT = '{priority}'
+    # LENGTH_CHECK_FIELDS_SELECT = '{priority}'
     # LENGTH_CHECK_FIELDS = [['county', 'phone'], 'county', 'phone']
-    LENGTH_CHECK_FIELDS = ['{cntytoprint}', '{specialphone}', '{specialurl}']
+    # LENGTH_CHECK_FIELDS = ['{cntytoprint}', '{specialphone}', '{specialurl}']
     # test = ['+'.join(x) for x in LENGTH_CHECK_FIELDS]
     # test = ['county', 'phone']
 
 
-    data = [['Small', '555-555-5555', 'x'], ['Medium', '555-555-5552 x2', 'x'], ['VeryVeryLonnnng', '555-555-5553 ext 3', '']]
-    df = pd.DataFrame(data, columns=['{county}', '{phone}', '{PRIORITY}'])
+    # data = [['Small', '555-555-5555', 'x'], ['Medium', '555-555-5552 x2', 'x'], ['VeryVeryLonnnng', '555-555-5553 ext 3', '']]
+    # df = pd.DataFrame(data, columns=['{county}', '{phone}', '{PRIORITY}'])
 
-    max_label_lengths(initial_attachment_dir=INITIAL_ATTACHMENT_DIR,)
+    # max_label_lengths(initial_attachment_dir=INITIAL_ATTACHMENT_DIR,)
                       # label_docx="~/Dropbox/Postcard Files/Attachments/Campaigns/TEST NAN3/Input/TEST Special GOTV "
                       #            "LABELS-30per page 1-3-2023.docx")
-    a = 1
+    # a = 1
 
     # boe_xls = "~/Dropbox/Postcard Files/Attachments/Campaigns/TEST NAN3/Input/BOE Info VA (1).xlsx",
 
