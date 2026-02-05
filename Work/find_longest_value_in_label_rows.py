@@ -11,6 +11,7 @@ from docx import Document  # package in Conda is python-docx, not simply docx
 from uvbekutils import pyautobek
 from uvbekutils import safe_str
 from uvbekutils import scroll_box
+from uvbekutils import list_pick
 
 
 def get_label_text(label_docx):
@@ -121,6 +122,27 @@ def max_label_lengths(*, used_field: str = '{priority}', label_docx=None, initia
     # Lowercase all column names to match lowercase keys
     df.columns = [col.lower() for col in df.columns]
 
+
+    if used_field is None:
+        # FIXME remove get_file_name use select_file
+        # label_docx = get_file_name("PICK LABEL DOCX",
+        #                          initial_dir=initial_attachment_dir,
+        #                          title2="Pick label docx template that will have BOE info merged into it "
+        #                                 "('LABEL 30 per page...')")
+        used_field = list_pick(lst=df.columns,
+                               title="PICK KEY FIELD TO ID 'USED' COUNTIES",
+                               msg="All counties with this field not empty will be checked as a group ("
+                                   "'{priority}' will be used if none chosen).",
+                               select_mode='single',
+                               pre_select=False,
+                               allow_none=True,
+                               )[0]
+        if used_field == '':
+            used_field = '{priority}'
+
+    logger.info(f"Label docx being used for input: '{label_docx}")
+
+
     # set object type so field can accept an object - a list
     df['lines'] = ''
     df['lines'] = df['lines'].astype('object')
@@ -206,7 +228,7 @@ def max_label_lengths(*, used_field: str = '{priority}', label_docx=None, initia
 
     # Build and display alert with max line lengths and label text
     alert_lines = []
-    alert_lines.append("--- SAMPLE LABEL TEXT ---")
+    alert_lines.append("--- LABEL TEMPLATE TEXT ---")
     alert_lines.append(label_text)
     alert_lines.append("")
     for section_name, section_result, row_count in max_line_results:
@@ -266,7 +288,7 @@ if __name__ == '__main__':
     INITIAL_ATTACHMENT_DIR = Path("~/Dropbox/Postcard Files/Attachments/Campaigns").expanduser()
     # LENGTH_CHECK_FIELDS_SELECT = '{priority}'
     LENGTH_CHECK_FIELDS_SELECT = '{use}'
-    max_label_lengths(used_field=LENGTH_CHECK_FIELDS_SELECT, initial_attachment_dir=INITIAL_ATTACHMENT_DIR, )
+    max_label_lengths(used_field=None, initial_attachment_dir=INITIAL_ATTACHMENT_DIR, )
 
     a = 1
     # Label text is copied here.  Lines are trimmed.
