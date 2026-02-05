@@ -1,6 +1,6 @@
-2026-02-03 14:18:28.501 | INFO     | __main__:check_boe_urls:99 - BOE xls being checked is: '/Users/Denise/Dropbox/Postcard Files/PythonPrograms/Development/LeviTool/Work/TEST BOE Info VA.xlsx
-2026-02-03 14:18:29.035 | WARNING  | Work.read_boe_xls:read_boe_xls:44 - 2 columns had blanks in key row.  Is tht ok?
-2026-02-03 14:18:29.092 | INFO     | __main__:check_boe_urls:113 - Key field being checked is '{specificurl}'
-2026-02-03 14:18:29.092 | INFO     | __main__:check_boe_urls:131 - Key field being used to limit counties is '{use}'
-2026-02-03 14:18:29.431 | INFO     | __main__:check_boe_urls:155 - Error with:'https://www.co.accomack.va.us/departments/registrar', 'Response is 403, not 200'
-2026-02-03 14:18:30.138 | INFO     | __main__:check_boe_urls:155 - Error with:'https://www.cityofchesapeake.net/government/city-departments/departments/voter-registrar.htm', 'Response is 404, not 200'
+2026-02-04 23:02:52.020 | INFO     | __main__:check_boe_urls:111 - BOE xls being checked is: '/Users/Denise/Dropbox/Postcard Files/PythonPrograms/Development/LeviTool/Work/TEST BOE Info VA.xlsx
+2026-02-04 23:02:52.284 | WARNING  | Work.read_boe_xls:read_boe_xls:51 - 2 columns had blanks in key row.  Is tht ok?
+2026-02-04 23:02:52.338 | INFO     | __main__:check_boe_urls:125 - Key field being checked is '{specificurl}'
+2026-02-04 23:02:52.338 | INFO     | __main__:check_boe_urls:143 - Key field being used to limit counties is '{use}'
+2026-02-04 23:02:52.766 | INFO     | __main__:check_boe_urls:167 - Error with:'https://www.co.accomack.va.us/departments/registrar', 'Response is 403, not 200'
+2026-02-04 23:02:53.905 | INFO     | __main__:check_boe_urls:167 - Error with:'https://www.cityofchesapeake.net/government/city-departments/departments/voter-registrar.htm', 'Response is 404, not 200'
