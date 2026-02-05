@@ -29,7 +29,7 @@ def get_label_text(label_docx):
     return label_text
 
 
-def max_label_lengths(*, used_field: str = '{priority}', label_docx=None, initial_attachment_dir=None) -> None:
+def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attachment_dir=None) -> None:
     """
     For checking length of lines in labels to be 'mail merged' by the Levitool. Length should be 34 or under.
     Given a block of text lines separated by return chars, this will make substitutions of df fields listed in

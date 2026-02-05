@@ -393,13 +393,14 @@ def main():
 
     if choice == 'levitool':
         main_levi()
+    elif choice == 'max row len':
+        max_label_lengths(initial_attachment_dir=INITIAL_ATTACHMENT_DIR)
     elif choice == 'check urls':
         check_boe_urls(key_containing_url=None, key_for_used=None, open_browser=True)
     elif choice == 'check short urls':
         check_short_boe_urls(key_containing_short_url=None, key_containing_url=None, key_for_used=None,
                              open_browser=None)
-    elif choice == 'max row len':
-        max_label_lengths(initial_attachment_dir=INITIAL_ATTACHMENT_DIR)
+
     else:
         exit()
 
