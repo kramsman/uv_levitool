@@ -12,9 +12,20 @@ A separate subdirectory under a min directory named "Output" is created for each
 
 # TODO currently blanks replaced with "' '" in df used_counties_df.  OK or should be blank? Or '.'?
 # TODO Check max length of fields not working. But it's in another ersion - levitool in non ROV Python?
+# TODO: can we grag point size for line in template and compare that ro the allowed (build a table of values and
+#  compare)?
 
-import subprocess
-subprocess.run(["uv", "add", "python-docx"], check=True)
+if True:  # this updates the uvbekutils package which contains the little helper programs
+    import subprocess
+    subprocess.run(["uv", "add", "python-docx"], check=True)
+
+
+    subprocess.run(["uv", "add", "uvbekutils", "--upgrade-package", "uvbekutils"], check=True)
+    #
+    # subprocess.run(["uv", "add","uvbekutils@git+https://github.com/kramsman/uvbekutils.git@optiona_showbuttons"],
+    #                check=True)
+    # subprocess.run(["uv", "add", "uvbekutils", "--upgrade-package", "uvbekutils@optiona_showbuttons"], check=True)
+
 
 import glob
 import re

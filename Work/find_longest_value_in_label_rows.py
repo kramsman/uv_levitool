@@ -65,28 +65,30 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
         Returns:
             str: formatted string with max line info for each line
         """
-        # get number of list elements (# of lines) in the list field, so we know how many lines need to be checked
-        number_of_lines = len(df[line_list_field].iloc[0])
+        if df.empty:
+            pyautobek.alert(f"No counties are being selected based on the field '{used_field}'.\n\n"
+                            f"Checking for these copunties will be skipped.\n"
+                            f"If desired, rerun choosing another field (like {{priority}}'" ,
+                        "No Counties Being Selected")
+            result = 'None'
+        else:
+            # get number of list elements (# of lines) in the list field, so we know how many lines need to be checked
+            number_of_lines = len(df[line_list_field].iloc[0])
+            result_lines = []
+            for line_number in range(number_of_lines):
+                line_data = [line[line_number] for line in df[line_list_field]]
+                max_line = max(line_data, key=len)
+                max_line_length = len(max_line)
+                # print(f"line_data: {line_data}")
+                # line_info = f"line {line_number + 1} max_line: '{max_line}', len:{max_line_length}"
+                line_info = f"line {line_number + 1},  max: {max_line_length}   '{max_line}'"
+                print(line_info)
+                result_lines.append(line_info)
+                result = '\n'.join(result_lines)
 
-        result_lines = []
-        for line_number in range(number_of_lines):
-            line_data = [line[line_number] for line in df[line_list_field]]
-            max_line = max(line_data, key=len)
-            max_line_length = len(max_line)
-            # print(f"line_data: {line_data}")
-            # line_info = f"line {line_number + 1} max_line: '{max_line}', len:{max_line_length}"
-            line_info = f"line {line_number + 1},  max: {max_line_length}   '{max_line}'"
-            print(line_info)
-            result_lines.append(line_info)
-
-        return '\n'.join(result_lines)
+        return result
 
     if label_docx is None:
-        # FIXME remove get_file_name use select_file
-        # label_docx = get_file_name("PICK LABEL DOCX",
-        #                          initial_dir=initial_attachment_dir,
-        #                          title2="Pick label docx template that will have BOE info merged into it "
-        #                                 "('LABEL 30 per page...')")
         label_docx = select_file("PICK LABEL DOCX",
                                  start_dir=initial_attachment_dir,
                                  files_like='*.docx',
@@ -124,11 +126,6 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
 
 
     if used_field is None:
-        # FIXME remove get_file_name use select_file
-        # label_docx = get_file_name("PICK LABEL DOCX",
-        #                          initial_dir=initial_attachment_dir,
-        #                          title2="Pick label docx template that will have BOE info merged into it "
-        #                                 "('LABEL 30 per page...')")
         used_field = list_pick(lst=df.columns,
                                title="PICK KEY FIELD TO ID 'USED' COUNTIES",
                                msg="All counties with this field not empty will be checked as a group ("
