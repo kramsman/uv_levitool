@@ -331,8 +331,10 @@ def main_levi():
             print(blank_in_df[list(keys_in_doc)])
         pyautobek.alert("Some info to be merged contains spaces.\n\nSee log.", "ERROR: Used data contains spaces")
 
-    exit_yes_no("Close MS Word now if open\n\n",
+    exit_yes_no("Close MS Word if open and continue?\n\nContinue?",
                 'Continue or Exit?', )
+
+    subprocess.call(['osascript', '-e', 'tell application "Word" to quit'])
 
     count = 0
     for _, county_row in used_counties_df.iterrows():  # uses df of only rows with used != nan from above
@@ -418,8 +420,4 @@ def main():
 
 if __name__ == '__main__':
 
-    #uv add uvbekutils --upgrade-package uvbekutils
-
-
-    # main_levi()
     main()
