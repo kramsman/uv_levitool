@@ -292,25 +292,6 @@ def main_levi():
     exit_yes_no(f"Will process {used_counties_df.shape[0]} of {county_sheet.shape[0]} total counties:\n\n"
                 f"{string_of_used_county_names}\n\nContinue?")
 
-    # get max lengths of county to check label
-    # TODO this is where 'keys' list could be used
-    for field in LENGTH_CHECK_FIELDS:
-        max_field = max(county_sheet[f"{{{field}}}"], key=len)
-        logger.info(f"Max of '{{{field}}}' column: '{max_field}', length is {len(max_field)}")
-    logger.info("")
-
-    # get max lengths of county to check label for rows selected
-    if LENGTH_CHECK_FIELDS_SELECT:
-        for field in LENGTH_CHECK_FIELDS:
-            max_field = max(county_sheet.loc[county_sheet[f"{{{LENGTH_CHECK_FIELDS_SELECT}}}"].notnull()]
-                            [f"{{{field}}}"], key=len)
-            logger.info(f"Max of '{{{field}}}' where '{{{LENGTH_CHECK_FIELDS_SELECT}}}' is not blank: '{max_field}', length is {len(max_field)}")
-    logger.info("")
-
-    exit_yes_no("Look at the log.  Do you want to continue running or set {USE} based on the longest substitutions?  "
-                "Check the log for values.\n\nContinue?",
-                "Continue or Set {USE} by Field Max Lengths?")
-
     # check if any fields to be substituted have nan values
     logger.debug("checking nans")
     nan_in_df = used_counties_df[used_counties_df.isnull().any(axis=1)]
