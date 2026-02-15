@@ -7,6 +7,10 @@ A pdf of each 'docx' is created after the merge.
 A separate subdirectory under a min directory named "Output" is created for each used row in the input xlsx file.
 """
 
+
+# # After creating your project with uv init to create requirements.txt
+# uv pip compile pyproject.toml -o requirements.txt
+
 # NEED TO USE BACK VERSION OF OPENPYXL for bug caused in 3.1: county_sheet_df = pd.ExcelFile( script_file_name).parse(
 # use openpyxl 3.0.10 not 3.1.2 because later bombs if xlsx has filters  https://stackoverflow.com/questions/75382340/python-pandas-read-excel-error-value-must-be-either-numerical-or-a-string-conta
 

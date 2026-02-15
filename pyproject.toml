@@ -14,9 +14,10 @@ dependencies = [
     #    "pysimplegui>=5.0.8",
     "python-docx>=1.2.0",
     "requests>=2.32.5",
-    "uvbekutils",
+    # "uvbekutils",
+    "uvbekutils @ git+https://github.com/kramsman/uvbekutils.git",
 ]
 
+
 [tool.uv.sources]
-uvbekutils = { git = "https://github.com/kramsman/uvbekutils.git" }
-#    "pysimplegui>=5.0.8",
+# uvbekutils = { git = "https://github.com/kramsman/uvbekutils.git" }
