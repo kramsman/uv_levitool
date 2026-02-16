@@ -51,7 +51,7 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
     import glob
     from uvbekutils import exit_yes, select_file
 
-    from Work.read_boe_xls import read_boe_xls
+    from uv_levitool.Work.read_boe_xls import read_boe_xls
 
     def print_max_line_info(df: pd.DataFrame, line_list_field: str) -> str:
         """
