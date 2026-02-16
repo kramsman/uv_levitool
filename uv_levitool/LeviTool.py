@@ -7,6 +7,7 @@ A pdf of each 'docx' is created after the merge.
 A separate subdirectory under a min directory named "Output" is created for each used row in the input xlsx file.
 """
 
+# FIXME: make git repository a variable for identification and easy changes
 
 # # After creating your project with uv init to create requirements.txt
 # uv pip compile pyproject.toml -o requirements.txt
@@ -20,6 +21,7 @@ A separate subdirectory under a min directory named "Output" is created for each
 #  compare)?
 
 import subprocess
+import sys
 
 if False:  # DOES NOT WORK AS PACKAGE this updates the uvbekutils package which contains the little helper programs
     subprocess.run(["uv", "add", "python-docx"], check=True)
@@ -59,6 +61,13 @@ LENGTH_CHECK_FIELDS = []  #FIXME: Above fields are not what are being used for W
 LENGTH_CHECK_FIELDS_SELECT = 'PRIORITY'
 
 setup_loguru("DEBUG", "DEBUG", )
+
+def update():
+    subprocess.run([
+        sys.executable, "-m", "pip", "install",
+        "--force-reinstall",
+        "git+https://github.com/kramsman/uv_levitool.git"
+    ])
 
 
 def count_brackets(s):
