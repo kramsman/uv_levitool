@@ -44,7 +44,7 @@ from .check_boe_urls import check_boe_urls, check_short_boe_urls
 from docx import Document  # package in Conda is python-docx, not simply docx
 from docx2pdf import convert
 from loguru import logger
-from Work.find_longest_value_in_label_rows import max_label_lengths
+from .Work.find_longest_value_in_label_rows import max_label_lengths
 
 pd.options.mode.copy_on_write = True  # fix chain assignment forced in Pandas 3.0
 
