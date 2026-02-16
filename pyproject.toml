@@ -14,7 +14,7 @@ dependencies = [
     #    "pysimplegui>=5.0.8",
     "python-docx>=1.2.0",
     "requests>=2.32.5",
-    "uvbekutils",
+    "uvbekutils @ git+https://github.com/kramsman/uvbekutils.git",
 ]
 
 [project.scripts]
@@ -24,6 +24,9 @@ levitool = "uv_levitool.LeviTool:main"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["uv_levitool"]
