@@ -40,7 +40,7 @@ from pathlib import Path
 import pandas as pd
 from uvbekutils import exit_yes, exit_yes_no, setup_loguru, select_file
 from uvbekutils import pyautobek
-from check_boe_urls import check_boe_urls, check_short_boe_urls
+from .check_boe_urls import check_boe_urls, check_short_boe_urls
 from docx import Document  # package in Conda is python-docx, not simply docx
 from docx2pdf import convert
 from loguru import logger
