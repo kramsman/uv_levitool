@@ -395,6 +395,11 @@ def main_levi():
 
 def main():
     """ pick function from menu """
+    import sys
+    if "--update" in sys.argv:
+        subprocess.run(["uvx", "--reinstall", "--from",
+            "git+https://github.com/kramsman/uv_levitool.git", "levitool"])
+        return
 
     choice = pyautobek.confirm("What do you want to do?", title='Select',
                       buttons=['LeviTool', 'Max Row Len', 'Check Urls', 'Check Short Urls', 'Exit'])
