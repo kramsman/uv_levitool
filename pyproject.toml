@@ -17,6 +17,9 @@ dependencies = [
     "uvbekutils",
 ]
 
+[project.scripts]
+levitool = "uv_levitool.LeviTool:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
