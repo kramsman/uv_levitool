@@ -19,8 +19,9 @@ A separate subdirectory under a min directory named "Output" is created for each
 # TODO: can we grag point size for line in template and compare that ro the allowed (build a table of values and
 #  compare)?
 
+import subprocess
+
 if False:  # DOES NOT WORK AS PACKAGE this updates the uvbekutils package which contains the little helper programs
-    import subprocess
     subprocess.run(["uv", "add", "python-docx"], check=True)
 
 
