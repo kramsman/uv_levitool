@@ -95,7 +95,7 @@ def check_boe_urls(key_containing_url=None, key_for_used=None, open_browser=Fals
 
     # FIXME Open browser for all did not open any
 
-    from Work.read_boe_xls import read_boe_xls
+    from .Work.read_boe_xls import read_boe_xls
 
     if boe_xls is None:
         boe_xls = select_file(
@@ -190,7 +190,7 @@ def check_short_boe_urls(key_containing_short_url=None, key_containing_url=None,
         boe_xls (): BEO.xlsx file being checked, used by Levitool
     """
 
-    from Work.read_boe_xls import read_boe_xls
+    from .Work.read_boe_xls import read_boe_xls
 
     if boe_xls is None:
         # boe_xls = get_file_name("Pick BOE file (xlsx) with urls to check.",
