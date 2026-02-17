@@ -164,7 +164,7 @@ def check_boe_urls(key_containing_url=None, key_for_used=None, open_browser=Fals
         if url_error(url) is None:
             logger.info(f"OK: '{url}'")
         else:
-            logger.info(f"Error with:'{url}', '{url_error(url)}'")
+            logger.warning(f"Error with:'{url}', '{url_error(url)}'")
 
         if open_browser == 'all':
             webbrowser.open(url, new=2)
