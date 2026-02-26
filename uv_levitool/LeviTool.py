@@ -5,6 +5,9 @@ All the input files must be in a directory named 'Input', and must contain one x
 any number of docx files which will have the dat merged into them.
 A pdf of each 'docx' is created after the merge.
 A separate subdirectory under a min directory named "Output" is created for each used row in the input xlsx file.
+
+To run this in Pycharm, use a configuations set to 'module' with a name like "uv_levitool.LeviTool"
+and a working dir like "/Users/Denise/Library/CloudStorage/Dropbox/non ROV python progs/uv_levitool"
 """
 
 # # After creating your project with uv init to create requirements.txt

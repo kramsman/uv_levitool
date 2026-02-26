@@ -4,14 +4,12 @@ version = "0.2.0"
 description = "create script and label files from docx templates and input xlsx"
 requires-python = ">=3.12"
 dependencies = [
-    "PyQt6",  # could use pyside6 with alittle work
+    "PyQt6",
     "docx>=0.2.4",
     "docx2pdf>=0.1.8",
     "loguru>=0.7.3",
     "pandas>=2.0.0",
-    #    "pymsgbox>=2.0.1",
     "pyside6>=6.5.1",
-    #    "pysimplegui>=5.0.8",
     "python-docx>=1.2.0",
     "requests>=2.32.5",
     "uvbekutils",
@@ -32,7 +30,7 @@ allow-direct-references = true
 packages = ["uv_levitool"]
 
 [tool.uv.sources]
-uvbekutils = { git = "https://github.com/kramsman/uvbekutils.git", rev = "master" }
+uvbekutils = { git = "https://github.com/kramsman/uvbekutils.git" }
 
 [dependency-groups]
 dev = [
