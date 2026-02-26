@@ -32,7 +32,7 @@ allow-direct-references = true
 packages = ["uv_levitool"]
 
 [tool.uv.sources]
-uvbekutils = { git = "https://github.com/kramsman/uvbekutils.git", rev = "optiona_showbuttons" }
+uvbekutils = { git = "https://github.com/kramsman/uvbekutils.git" }
 
 [dependency-groups]
 dev = [

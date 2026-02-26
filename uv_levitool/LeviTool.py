@@ -16,9 +16,18 @@ A separate subdirectory under a min directory named "Output" is created for each
 # use openpyxl 3.0.10 not 3.1.2 because later bombs if xlsx has filters  https://stackoverflow.com/questions/75382340/python-pandas-read-excel-error-value-must-be-either-numerical-or-a-string-conta
 
 # TODO currently blanks replaced with "' '" in df used_counties_df.  OK or should be blank? Or '.'?
-# TODO Check max length of fields not working. But it's in another ersion - levitool in non ROV Python?
+# TODO Check max length of fields not working. But it's in another version - levitool in non ROV Python?
 # TODO: can we grag point size for line in template and compare that ro the allowed (build a table of values and
 #  compare)?
+
+from .Scripts.uvgit import main as uvgit
+
+# if uvgit(["https://github.com/kramsman/uvbekutils.git", "main"]) != 0:
+if uvgit(["https://github.com/kramsman/uvbekutils.git"]) != 0:
+    exit()
+
+import importlib
+importlib.invalidate_caches()  # force Python to re-scan installed packages after uvgit add
 
 import subprocess
 import sys

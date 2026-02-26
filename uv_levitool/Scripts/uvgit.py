@@ -24,10 +24,16 @@ import re
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 from typing import List, Optional, Tuple
 
 from loguru import logger
-from uvbekutils import setup_loguru
+
+try:
+    from uvbekutils import setup_loguru
+    _HAS_SETUP_LOGURU = True
+except ImportError:
+    _HAS_SETUP_LOGURU = False
 
 SUBPROCESS_TIMEOUT = 120  # seconds
 
@@ -63,13 +69,31 @@ def _parse_package_name(repo_url: str) -> Optional[str]:
     return match.group(1) if match else None
 
 
-def _uv_available() -> bool:
-    """Check whether the uv executable is present on PATH.
+def _find_uv() -> Optional[str]:
+    """Locate the uv executable, checking PATH then common install locations.
+
+    PyCharm and other IDEs may not inherit the full shell PATH, so uv may be
+    present on the system but invisible to shutil.which. This function falls
+    back to well-known installation directories used by uv's own installer,
+    Homebrew, and Cargo.
 
     Returns:
-        bool: True if uv is found, False otherwise.
+        str: Full path to the uv executable, or None if not found anywhere.
     """
-    return shutil.which("uv") is not None
+    found = shutil.which("uv")
+    if found:
+        return found
+
+    common = [
+        Path.home() / ".local" / "bin" / "uv",       # uv installer default
+        Path.home() / ".cargo" / "bin" / "uv",        # cargo install
+        Path("/opt/homebrew/bin/uv"),                  # Homebrew on Apple Silicon
+        Path("/usr/local/bin/uv"),                     # Homebrew on Intel / manual
+    ]
+    for path in common:
+        if path.exists():
+            return str(path)
+    return None
 
 
 def _build_add_spec(repo_url: str, branch: Optional[str]) -> str:
@@ -127,8 +151,8 @@ def preflight(repo_url: str) -> Tuple[bool, str]:
     if not pkg:
         return False, f"Cannot derive package name from URL: {repo_url!r}"
 
-    if not _uv_available():
-        return False, "'uv' was not found on PATH — install uv first"
+    if not _find_uv():
+        return False, "'uv' was not found on PATH or common install locations — install uv first"
 
     return True, ""
 
@@ -150,8 +174,9 @@ def upgrade_package(repo_url: str, pkg_name: str, branch: Optional[str]) -> bool
     Returns:
         bool: True if uv exited successfully, False on error or timeout.
     """
+    uv = _find_uv()
     add_spec = _build_add_spec(repo_url, branch)
-    cmd = ["uv", "add", add_spec, "--upgrade-package", pkg_name]
+    cmd = [uv, "add", add_spec, "--upgrade-package", pkg_name]
     logger.info("Upgrading: {}", " ".join(cmd))
     try:
         subprocess.run(cmd, check=True, timeout=SUBPROCESS_TIMEOUT)
@@ -176,8 +201,9 @@ def add_package(repo_url: str, branch: Optional[str]) -> bool:
     Returns:
         bool: True if uv exited successfully, False on error or timeout.
     """
+    uv = _find_uv()
     add_spec = _build_add_spec(repo_url, branch)
-    cmd = ["uv", "add", add_spec]
+    cmd = [uv, "add", add_spec]
     logger.info("Adding: {}", " ".join(cmd))
     try:
         subprocess.run(cmd, check=True, timeout=SUBPROCESS_TIMEOUT)
@@ -207,7 +233,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     Returns:
         int: Exit code (see module docstring for values).
     """
-    setup_loguru("DEBUG", "DEBUG")
+    if _HAS_SETUP_LOGURU:
+        setup_loguru("DEBUG", "DEBUG")
+    else:
+        logger.remove()
+        logger.add(sys.stderr, level="DEBUG")
 
     if argv is None:
         argv = sys.argv[1:]
