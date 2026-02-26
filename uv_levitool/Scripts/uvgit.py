@@ -331,5 +331,32 @@ def test_preflight_empty_string_url():
     assert "empty" in msg
 
 
+import pytest
+
+# --- integration tests (hit the network — run with: pytest -m integration) ---
+
+@pytest.mark.integration
+def test_add_nonexistent_repo_returns_false():
+    # A well-formed URL that doesn't exist should make uv fail, returning False
+    result = add_package("https://github.com/kramsman/this-repo-does-not-exist-xyz.git", None)
+    assert result is False
+
+@pytest.mark.integration
+def test_add_existent_repo_returns_true():
+    # The supplied url should be a valid one and return True. If not, check existence in github.
+    result = add_package("https://github.com/kramsman/uvbekutils.git", "master")
+    assert result is True
+
+
+@pytest.mark.integration
+def test_upgrade_nonexistent_repo_returns_false():
+    result = upgrade_package(
+        "https://github.com/kramsman/this-repo-does-not-exist-xyz.git",
+        "nonexistent-pkg",
+        None,
+    )
+    assert result is False
+
+
 if __name__ == "__main__":
     sys.exit(main())

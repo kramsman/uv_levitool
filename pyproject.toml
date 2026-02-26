@@ -32,9 +32,14 @@ allow-direct-references = true
 packages = ["uv_levitool"]
 
 [tool.uv.sources]
-uvbekutils = { git = "https://github.com/kramsman/uvbekutils.git" }
+uvbekutils = { git = "https://github.com/kramsman/uvbekutils.git", rev = "master" }
 
 [dependency-groups]
 dev = [
     "pytest>=9.0.2",
+]
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: tests that make real network calls (run with -m integration)",
 ]

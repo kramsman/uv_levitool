@@ -7,8 +7,6 @@ A pdf of each 'docx' is created after the merge.
 A separate subdirectory under a min directory named "Output" is created for each used row in the input xlsx file.
 """
 
-# FIXME: make git repository a variable for identification and easy changes
-
 # # After creating your project with uv init to create requirements.txt
 # uv pip compile pyproject.toml -o requirements.txt
 
@@ -30,18 +28,6 @@ import importlib
 importlib.invalidate_caches()  # force Python to re-scan installed packages after uvgit add
 
 import subprocess
-import sys
-
-if False:  # DOES NOT WORK AS PACKAGE this updates the uvbekutils package which contains the little helper programs
-    subprocess.run(["uv", "add", "python-docx"], check=True)
-
-
-    subprocess.run(["uv", "add", "uvbekutils", "--upgrade-package", "uvbekutils"], check=True)
-    #
-    # subprocess.run(["uv", "add","uvbekutils@git+https://github.com/kramsman/uvbekutils.git@optiona_showbuttons"],
-    #                check=True)
-    # subprocess.run(["uv", "add", "uvbekutils", "--upgrade-package", "uvbekutils@optiona_showbuttons"], check=True)
-
 
 import glob
 import re
@@ -70,14 +56,6 @@ LENGTH_CHECK_FIELDS = []  #FIXME: Above fields are not what are being used for W
 LENGTH_CHECK_FIELDS_SELECT = 'PRIORITY'
 
 setup_loguru("DEBUG", "DEBUG", )
-
-def update():
-    subprocess.run([
-        sys.executable, "-m", "pip", "install",
-        "--force-reinstall",
-        "git+https://github.com/kramsman/uv_levitool.git"
-    ])
-
 
 def count_brackets(s):
     """ counts the difference in the number of left and right brackets. returns -10000 if difference is more than 1 """
