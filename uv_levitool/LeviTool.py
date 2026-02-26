@@ -23,7 +23,7 @@ A separate subdirectory under a min directory named "Output" is created for each
 from .Scripts.uvgit import main as uvgit
 
 # if uvgit(["https://github.com/kramsman/uvbekutils.git", "main"]) != 0:
-if uvgit(["https://github.com/kramsman/uvbekutils.git"]) != 0:
+if uvgit(["https://github.com/kramsman/uvbekutils.git"]) > 1:  # neither added nor updated
     exit()
 
 import importlib
