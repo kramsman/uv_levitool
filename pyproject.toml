@@ -14,7 +14,7 @@ dependencies = [
     #    "pysimplegui>=5.0.8",
     "python-docx>=1.2.0",
     "requests>=2.32.5",
-    "uvbekutils @ git+https://github.com/kramsman/uvbekutils.git",
+    "uvbekutils",
 ]
 
 [project.scripts]
@@ -32,4 +32,9 @@ allow-direct-references = true
 packages = ["uv_levitool"]
 
 [tool.uv.sources]
-uvbekutils = { git = "https://github.com/kramsman/uvbekutils.git" }
+uvbekutils = { git = "https://github.com/kramsman/uvbekutils.git", rev = "optiona_showbuttons" }
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
