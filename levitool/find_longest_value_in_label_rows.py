@@ -12,6 +12,7 @@ from uvbekutils import pyautobek
 from uvbekutils import safe_str
 from uvbekutils import scroll_box
 from uvbekutils import list_pick
+from read_boe_xls import read_boe_xls
 
 
 def get_label_text(label_docx):
@@ -50,8 +51,6 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
     import re
     import glob
     from uvbekutils import exit_yes, select_file
-
-    from uv_levitool.Work.read_boe_xls import read_boe_xls
 
     def print_max_line_info(df: pd.DataFrame, line_list_field: str) -> str:
         """

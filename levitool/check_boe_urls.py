@@ -1,10 +1,8 @@
 
 from pathlib import Path
 from loguru import logger
-from uvbekutils import scroll_box
 from uvbekutils import select_file
-from uvbekutils import setup_loguru, exit_yes, select_from_list, list_pick
-# from uvbekutils import text_box
+from uvbekutils import setup_loguru, exit_yes, list_pick
 from uvbekutils import pyautobek
 
 import webbrowser
@@ -40,6 +38,8 @@ def url_error(url):
         if response.url == 'https://rebrandly.com/404':
             return 'https://rebrandly.com/404'
         elif response.status_code == 200:
+            return None
+        elif response.status_code == 403:
             return None
         else:
             return f"Response is {response.status_code}, not 200"
@@ -95,7 +95,7 @@ def check_boe_urls(key_containing_url=None, key_for_used=None, open_browser=Fals
 
     # FIXME Open browser for all did not open any
 
-    from .Work.read_boe_xls import read_boe_xls
+    from read_boe_xls import read_boe_xls
 
     if boe_xls is None:
         boe_xls = select_file(
@@ -190,7 +190,7 @@ def check_short_boe_urls(key_containing_short_url=None, key_containing_url=None,
         boe_xls (): BEO.xlsx file being checked, used by Levitool
     """
 
-    from .Work.read_boe_xls import read_boe_xls
+    from read_boe_xls import read_boe_xls
 
     if boe_xls is None:
         # boe_xls = get_file_name("Pick BOE file (xlsx) with urls to check.",
@@ -213,12 +213,30 @@ def check_short_boe_urls(key_containing_short_url=None, key_containing_url=None,
 
     county_sheet_keys, county_sheet_df = read_boe_xls(boe_xls)
 
-    # for short url get key like '{url}' if not passed
+    # for comparison url get key like '{url}' if not passed
+    if key_containing_url is None:
+        # key_containing_url = select_from_list(county_sheet_keys, 'Select tag for url field to match',
+        #                                       select_type='radio')
+        key_containing_url = list_pick(county_sheet_keys,
+                                     'Select tag for FINAL URL',
+                                     "Select tag for url field to match, often '{url}'",
+                                     select_mode='single',
+                                     pre_select=False,
+                                        allow_none=False,
+                                       )[0]
+    # make sure it's on file
+    key_containing_url = key_containing_url.lower()
+    logger.info(f"Key field being checked is '{key_containing_url}'")
+    # make sure key is on file
+    if key_containing_url not in county_sheet_keys:
+        exit_yes(f"Url key '{key_containing_url}' not in county keys: \n\n{', '.join(county_sheet_keys)}")
+
+    # for short url get key like '{bitlyurl}' if not passed
     if key_containing_short_url is None:
         # key_containing_short_url = select_from_list(county_sheet_keys, 'Select tag for short url field to be checked',
         #                                             select_type='radio')
         key_containing_short_url = list_pick(county_sheet_keys,
-                                             'Select tag',
+                                             'Select tag for SHORT URL',
                                              "Select tag for short url field to be checked (usually '{shorturl}' or "
                                              "'{bitlyurl}')",
                                              select_mode='single',
@@ -231,24 +249,6 @@ def check_short_boe_urls(key_containing_short_url=None, key_containing_url=None,
     # make sure key is on file
     if key_containing_short_url not in county_sheet_keys:
         exit_yes(f"Url key '{key_containing_short_url}' not in county keys: \n\n{', '.join(county_sheet_keys)}")
-
-    # for comparison url get key like '{url}' if not passed
-    if key_containing_url is None:
-        # key_containing_url = select_from_list(county_sheet_keys, 'Select tag for url field to match',
-        #                                       select_type='radio')
-        key_containing_url = list_pick(county_sheet_keys,
-                                     'Select tag',
-                                     "Select tag for url field to match, often '{url}'",
-                                     select_mode='single',
-                                     pre_select=False,
-                                        allow_none=False,
-                                       )[0]
-    # make sure it's on file
-    key_containing_url = key_containing_url.lower()
-    logger.info(f"Key field being checked is '{key_containing_url}'")
-    # make sure key is on file
-    if key_containing_url not in county_sheet_keys:
-        exit_yes(f"Url key '{key_containing_url}' not in county keys: \n\n{', '.join(county_sheet_keys)}")
 
     # get key like '{priority}' if not passed
     if key_for_used is None:
