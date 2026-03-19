@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m:*)",
+      "Bash(cd \"/Users/Denise/Library/CloudStorage/Dropbox/non ROV python progs/uv_levitool\" && .venv/bin/python uv_levitool/Scripts/uvgit.py https://github.com/kramsman/uvbekutils.git optiona_showbuttons 2>&1)",
+      "Bash(cd \"/Users/Denise/Library/CloudStorage/Dropbox/non ROV python progs/uv_levitool\" && .venv/bin/python -m pytest uv_levitool/Scripts/uvgit.py -v 2>&1)",
+      "Bash(cd \"/Users/Denise/Library/CloudStorage/Dropbox/non ROV python progs/uv_levitool\" && .venv/bin/python -m unittest uv_levitool.Scripts.uvgit -v 2>&1)",
+      "Bash(cd \"/Users/Denise/Library/CloudStorage/Dropbox/non ROV python progs/uv_levitool\" && uv add pytest --dev 2>&1)",
+      "Bash(cd \"/Users/Denise/Library/CloudStorage/Dropbox/non ROV python progs/uv_levitool\" && .venv/bin/pytest uv_levitool/Scripts/uvgit.py -v 2>&1)",
+      "Bash(which uv && .venv/bin/python -c \"from uv_levitool.Scripts.uvgit import _find_uv; print\\(_find_uv\\(\\)\\)\" 2>&1)"
+    ]
+  }
+}

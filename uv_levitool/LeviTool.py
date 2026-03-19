@@ -21,16 +21,12 @@ and a working dir like "/Users/Denise/Library/CloudStorage/Dropbox/non ROV pytho
 # TODO: can we grag point size for line in template and compare that ro the allowed (build a table of values and
 #  compare)?
 
-from .Scripts.uvgit import main as uvgit
-
-# if uvgit(["https://github.com/kramsman/uvbekutils.git", "main"]) != 0:
-if uvgit(["https://github.com/kramsman/uvbekutils.git"]) > 1:  # neither added nor updated
-    exit()
-
-import importlib
-importlib.invalidate_caches()  # force Python to re-scan installed packages after uvgit add
-
-import subprocess
+# run gitupdater to make sure bekutils and bekgoogle utility libraries are updated
+import sys
+import os
+sys.path.append(os.path.expanduser("~/Dropbox/Postcard Files/"))
+if True:
+   import gitupdater
 
 import glob
 import re
@@ -41,11 +37,11 @@ from pathlib import Path
 import pandas as pd
 from uvbekutils import exit_yes, exit_yes_no, setup_loguru, select_file
 from uvbekutils import pyautobek
-from .check_boe_urls import check_boe_urls, check_short_boe_urls
+from check_boe_urls import check_boe_urls, check_short_boe_urls
 from docx import Document  # package in Conda is python-docx, not simply docx
 from docx2pdf import convert
 from loguru import logger
-from .Work.find_longest_value_in_label_rows import max_label_lengths
+from find_longest_value_in_label_rows import max_label_lengths
 
 pd.options.mode.copy_on_write = True  # fix chain assignment forced in Pandas 3.0
 
