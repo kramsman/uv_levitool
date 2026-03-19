@@ -6,8 +6,8 @@ any number of docx files which will have the dat merged into them.
 A pdf of each 'docx' is created after the merge.
 A separate subdirectory under a min directory named "Output" is created for each used row in the input xlsx file.
 
-To run this in Pycharm, use a configuations set to 'module' with a name like "uv_levitool.LeviTool"
-and a working dir like "/Users/Denise/Library/CloudStorage/Dropbox/non ROV python progs/uv_levitool"
+To run this in Pycharm, use a configuations set to 'module' with a name like "levitool-root.LeviTool"
+and a working dir like "/Users/Denise/Library/CloudStorage/Dropbox/non ROV python progs/levitool-root"
 """
 
 # # After creating your project with uv init to create requirements.txt
@@ -28,6 +28,7 @@ sys.path.append(os.path.expanduser("~/Dropbox/Postcard Files/"))
 if True:
    import gitupdater
 
+import subprocess
 import glob
 import re
 from collections import Counter

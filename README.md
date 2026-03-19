@@ -114,7 +114,7 @@ xcode-select --install
    ```
 4. Install dependencies:
    ```bash
-   cd uv_levitool
+   cd levitool-root
    uv sync
    ```
 
