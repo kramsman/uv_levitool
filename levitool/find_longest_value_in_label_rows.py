@@ -13,6 +13,7 @@ from uvbekutils import safe_str
 from uvbekutils import scroll_box
 from uvbekutils import list_pick
 from read_boe_xls import read_boe_xls
+from constants import MAX_CHARS_PER_LINE_TEXT, CHARS_PER_LINE_30PP
 
 
 def get_label_text(label_docx) -> str:
@@ -35,6 +36,33 @@ def get_label_text(label_docx) -> str:
     # line = d.tables[0].rows[0].cells[0].paragraphs[0]
     print(f"{label_text=}")
     return label_text
+
+
+def get_label_font_sizes(label_docx) -> list:
+    """Returns the detected font size (in points) for each paragraph line in the label cell.
+
+    Checks each run's font size first, then falls back to the paragraph style font size.
+    Returns None for a line if the size cannot be determined (inherited from document default).
+
+    Args:
+        label_docx: Path or string path to the label docx template file.
+
+    Returns:
+        list: List of (line_number, font_size_pt) tuples, one per paragraph in the label cell.
+            font_size_pt is a float or None if undetermined.
+    """
+    d = deepcopy(Document(label_docx))
+    font_sizes = []
+    for i, para in enumerate(d.tables[0].rows[0].cells[0].paragraphs):
+        size_pt = None
+        for run in para.runs:
+            if run.font.size is not None:
+                size_pt = run.font.size.pt
+                break
+        if size_pt is None and para.style.font.size is not None:
+            size_pt = para.style.font.size.pt
+        font_sizes.append((i + 1, size_pt))
+    return font_sizes
 
 
 def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attachment_dir=None) -> None:
@@ -60,17 +88,23 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
     import glob
     from uvbekutils import exit_yes, select_file
 
-    def print_max_line_info(df: pd.DataFrame, line_list_field: str) -> str:
+    def print_max_line_info(df: pd.DataFrame, line_list_field: str, font_sizes: list = None) -> str:
         """Finds and prints the longest substituted line for each line position in the label.
+
+        Compares max line length against the Avery 5161 30pp character limit for the
+        detected font size and appends a warning if the line may run over.
 
         Args:
             df (pd.DataFrame): DataFrame where each row contains a list of substituted
                 label lines in the column specified by line_list_field.
             line_list_field (str): Name of the column containing per-row lists of label lines.
+            font_sizes (list): Optional list of (line_number, font_size_pt) from
+                get_label_font_sizes(). Used to check character limits per line.
 
         Returns:
-            str: Newline-joined summary of the longest line and its length for each
-                label line position, or 'None' if the DataFrame is empty.
+            str: Newline-joined summary of the longest line, its length, font size, and
+                any overrun warning for each label line position, or 'None' if the DataFrame
+                is empty.
         """
         if df.empty:
             pyautobek.alert(f"No counties are being selected based on the field '{used_field}'.\n\n"
@@ -86,9 +120,18 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
                 line_data = [line[line_number] for line in df[line_list_field]]
                 max_line = max(line_data, key=len)
                 max_line_length = len(max_line)
-                # print(f"line_data: {line_data}")
-                # line_info = f"line {line_number + 1} max_line: '{max_line}', len:{max_line_length}"
-                line_info = f"line {line_number + 1},  max: {max_line_length}   '{max_line}'"
+
+                size_pt = font_sizes[line_number][1] if font_sizes and line_number < len(font_sizes) else None
+                limit = CHARS_PER_LINE_30PP.get(int(size_pt)) if size_pt else None
+                warning = "  ** may run over-check" if limit and max_line_length > limit else ""
+                if size_pt and limit:
+                    size_str = f"  {size_pt} pt ({limit} allowed)"
+                elif size_pt:
+                    size_str = f"  {size_pt} pt"
+                else:
+                    size_str = ""
+
+                line_info = f"line {line_number + 1},  max: {max_line_length}   '{max_line}'{size_str}{warning}"
                 print(line_info)
                 result_lines.append(line_info)
                 result = '\n'.join(result_lines)
@@ -107,6 +150,7 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
     label_docx = Path(label_docx).expanduser()
 
     label_text = get_label_text(label_docx)
+    label_font_sizes = get_label_font_sizes(label_docx)
     keys = find_keys_in_text(label_text)
     keys = [key.lower() for key in keys]
 
@@ -193,13 +237,13 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
             print(df_non_nan[keys])
             print()
             print("MAX LINES IN SUBSTITUTED SCRIPT INFO FOR ALL ROWS WITH NO NAN VALUES")
-            result = print_max_line_info(df_non_nan, 'lines')
+            result = print_max_line_info(df_non_nan, 'lines', font_sizes=label_font_sizes)
             max_line_results.append(("ALL ROWS WITH NO NAN VALUES", result, len(df_non_nan)))
         print()
         a = 1
     else:
         print("MAX LINES IN SUBSTITUTED SCRIPT INFO FOR ALL ROWS")
-        result = print_max_line_info(df, 'lines')
+        result = print_max_line_info(df, 'lines', font_sizes=label_font_sizes)
         max_line_results.append(("ALL ROWS", result, len(df)))
         print()
 
@@ -223,7 +267,7 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
     else:
         print(f"MAX LINES IN SUBSTITUTED SCRIPT INFO FOR USED SUB ROWS ('{used_field}' not blank)")
         df_used_counties = df.loc[df[used_field].str.strip().notnull()]
-        result = print_max_line_info(df_used_counties, 'lines')
+        result = print_max_line_info(df_used_counties, 'lines', font_sizes=label_font_sizes)
         max_line_results.append((f"'USED' COUNTIES ('{used_field}' not blank)", result, len(df_used_counties)))
         print()
 
@@ -248,32 +292,7 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
     alert_lines.append(f"BOE Sheet: {boe_xls}")
     alert_lines.append("")
 
-    # Add font size reference tables
-    alert_lines.append("")
-    alert_lines.append("")
-    alert_lines.append("Estimated character limits")
-    alert_lines.append("")
-    alert_lines.append("30 per page, Avery 5161 Label")
-    alert_lines.append("Font Size | Approximate Characters per Line")
-    alert_lines.append("----------|--------------------------------")
-    alert_lines.append("8 pt        52-55 characters")
-    alert_lines.append("9 pt        46-49 characters")
-    alert_lines.append("10 pt       42-45 characters")
-    alert_lines.append("11 pt       38-41 characters")
-    alert_lines.append("12 pt       35-38 characters")
-    alert_lines.append("13 pt       32-35 characters")
-    alert_lines.append("14 pt       30-33 characters")
-    alert_lines.append("")
-    alert_lines.append("20 per page, Avery 5161 Label")
-    alert_lines.append("Font Size | Approximate Characters per Line")
-    alert_lines.append("----------|--------------------------------")
-    alert_lines.append("8 pt        80-85 characters")
-    alert_lines.append("9 pt        71-76 characters")
-    alert_lines.append("10 pt       64-68 characters")
-    alert_lines.append("11 pt       58-62 characters")
-    alert_lines.append("12 pt       53-57 characters")
-    alert_lines.append("13 pt       49-52 characters")
-    alert_lines.append("14 pt       46-49 characters")
+    alert_lines.append(MAX_CHARS_PER_LINE_TEXT)
 
     alert_message = '\n'.join(alert_lines)
     # pyautobek.alert(alert_message, "MAX LABEL LINE LENGTHS")

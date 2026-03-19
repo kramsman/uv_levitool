@@ -18,10 +18,6 @@ and a working dir like "/Users/Denise/Library/CloudStorage/Dropbox/non ROV pytho
 
 # TODO currently blanks replaced with "' '" in df used_counties_df.  OK or should be blank? Or '.'?
 # TODO Check max length of fields not working. But it's in another version - levitool in non ROV Python?
-# TODO: can we grag point size for line in template and compare that ro the allowed (build a table of values and
-#  compare)?
-# TODO create and import a file that gives max character count per line for 30 pp label and include in max length popup
-
 # run gitupdater to make sure bekutils and bekgoogle utility libraries are updated
 import sys
 import os
@@ -44,18 +40,9 @@ from docx import Document  # package in Conda is python-docx, not simply docx
 from docx2pdf import convert
 from loguru import logger
 from find_longest_value_in_label_rows import max_label_lengths
+from constants import INITIAL_ATTACHMENT_DIR, PROGRAM_REQUIRED_KEYS, TEST_INPUT_DIR, TEST_SKIP_PROMPTS
 
 pd.options.mode.copy_on_write = True  # fix chain assignment forced in Pandas 3.0
-
-INITIAL_ATTACHMENT_DIR = Path("~/Dropbox/Postcard Files/Attachments/Campaigns/").expanduser()
-
-
-# Keys required by the program in every BOE xlsx, regardless of docx template contents
-PROGRAM_REQUIRED_KEYS = {'{STATE}', '{CNTYFILENAME}', '{USE}'}
-
-# --- TEST FLAGS: set True only during dev, never commit as True ---
-TEST_INPUT_DIR = False       # skip file picker, use hardcoded input path
-TEST_SKIP_PROMPTS = False    # skip exit_yes_no confirmation dialogs
 
 setup_loguru("DEBUG", "DEBUG", )
 
