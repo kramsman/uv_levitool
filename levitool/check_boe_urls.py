@@ -10,8 +10,18 @@ import webbrowser
 ATTACHMENTS_INITIAL_DIR = Path("~/Dropbox/Postcard Files/Attachments/Campaigns").expanduser()
 
 
-def final_url(url):
-    """ returns the final redirected url.  so we can compare shortened urls to what's expected """
+def final_url(url: str):
+    """Follows all redirects for a URL and returns the final destination URL.
+
+    Useful for comparing shortened URLs to their expected targets.
+
+    Args:
+        url (str): The URL to resolve, including any redirects.
+
+    Returns:
+        str: The final redirected URL if the request succeeded.
+        Exception: The exception raised if the request failed.
+    """
 
     import requests
 
@@ -25,8 +35,19 @@ def final_url(url):
         return e
 
 
-def url_error(url):
-    """ checks if url is reachable. flags if rebrandly used by Andre missing """
+def url_error(url: str):
+    """Checks whether a URL is reachable and returns an error description if not.
+
+    Also flags Rebrandly 404 pages (missing short URLs created by Andre).
+
+    Args:
+        url (str): The URL to check.
+
+    Returns:
+        None: If the URL is reachable (HTTP 200 or 403).
+        str: An error description if the URL is unreachable or returns a non-200 status.
+        Exception: The requests exception if the connection or timeout failed.
+    """
 
     import requests
 
@@ -51,11 +72,19 @@ def url_error(url):
         return e
 
 
-def get_browser_option(open_browser):
-    """ when do we want to eopn browser window? optionas are 'all','error','no'
+def get_browser_option(open_browser) -> str:
+    """Prompts the user to choose a browser-opening mode if one has not already been set.
+
+    Accepted modes are 'no', 'error', and 'all'. If open_browser is True or not one
+    of those values, a dialog is shown. Also prompts the user to open a fresh browser
+    window if a non-'no' mode is chosen.
 
     Args:
-        open_browser (): parameter passed to script
+        open_browser: The current browser option. Pass True or an unrecognized string
+            to trigger the prompt dialog; pass 'no', 'error', or 'all' to use as-is.
+
+    Returns:
+        str: Lowercase browser option: 'no', 'error', or 'all'.
     """
 
     from uvbekutils import exit_yes
@@ -81,16 +110,22 @@ def get_browser_option(open_browser):
     return open_browser.lower()
 
 
-def check_boe_urls(key_containing_url=None, key_for_used=None, open_browser=False, boe_xls=None):
-    """ read the urls being used in scripts from a BOE file and list the inactive ones, open the active so they can
-        be reviewed
+def check_boe_urls(key_containing_url: str = None, key_for_used: str = None,
+                   open_browser=False, boe_xls=None) -> None:
+    """Reads URLs from a BOE xlsx file and reports unreachable ones; optionally opens them in a browser.
+
+    Prompts for the xlsx file, URL key, and 'used' filter key if not provided.
+    Checks each unique URL for reachability and optionally opens browser tabs for
+    review or error investigation.
 
     Args:
-        key_containing_url (): like '{evurl}'
-        key_for_used (): usually '{priority}' if specified. Field checks non-blank values; 'all' checks all without
-        prompt; None prompts where not picking one slects all.
-        open_browser (): True opens al urls in browser tab; False skips; None prompts
-        boe_xls (): BEO.xlsx file being checked, used by Levitool
+        key_containing_url (str): Column key holding the URL to check (e.g. '{evurl}').
+            Prompts if None.
+        key_for_used (str): Column key identifying active county rows (e.g. '{priority}').
+            Prompts if None; pass 'all' to check all rows without prompting.
+        open_browser: Browser opening mode. True or None prompts; 'all' opens every URL;
+            'error' opens only errored URLs; False skips browser entirely.
+        boe_xls: Path to the BOE xlsx file. Prompts via file picker if None.
     """
 
     # FIXME Open browser for all did not open any
@@ -177,17 +212,22 @@ def check_boe_urls(key_containing_url=None, key_for_used=None, open_browser=Fals
                             f"board of elections", new=2)
 
 
-def check_short_boe_urls(key_containing_short_url=None, key_containing_url=None, key_for_used=None, open_browser=None,
-                         boe_xls=None):
-    """ read the sort urls being used in scripts and url they should represent from a BOE file
-    and make sure they match. if not, short url needs to point to different url.
+def check_short_boe_urls(key_containing_short_url: str = None, key_containing_url: str = None,
+                         key_for_used: str = None, open_browser=None, boe_xls=None) -> None:
+    """Verifies that short URLs in a BOE xlsx redirect to their expected final URLs.
+
+    Compares the resolved destination of each short URL against the corresponding
+    full URL column and logs mismatches as errors.
 
     Args:
-        key_containing_url (): like '{evurl}'
-        key_for_used (): usually '{priority}' if specified. Field checks non-blank values; 'all' checks all without
-        prompt; None prompts where not picking one slects all.
-        open_browser (): True opens al urls in browser tab; False skips; None prompts
-        boe_xls (): BEO.xlsx file being checked, used by Levitool
+        key_containing_short_url (str): Column key holding the short URL
+            (e.g. '{shorturl}'). Prompts if None.
+        key_containing_url (str): Column key holding the expected final URL
+            (e.g. '{url}'). Prompts if None.
+        key_for_used (str): Column key identifying active county rows
+            (e.g. '{priority}'). Prompts if None.
+        open_browser: Browser opening mode passed to get_browser_option. Prompts if None.
+        boe_xls: Path to the BOE xlsx file. Prompts via file picker if None.
     """
 
     from read_boe_xls import read_boe_xls

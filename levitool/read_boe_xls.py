@@ -1,26 +1,31 @@
-def read_boe_xls(boe_xls_file, key_check_list=None, display_keys=False):
-    """ reads the key fields and data from boe_xls files used by the LeviTool
-    returning the keys in a list and the data in a dataframe.
-    All keys converted to lowercase.
-    Can check for occurrences of keys, usually erroring if more than one.
-    Columns with blank keys are removed.  Keys not surrounded by {} are errored.  First row is ignored."""
+def read_boe_xls(boe_xls_file, key_check_list=None, display_keys: bool = False) -> tuple:
+    """Reads key fields and county data from a BOE xlsx file used by LeviTool.
 
-    def check_count(key_str, key_count, oper, num_allowed):
-        """ make sure headers appear in file only given number of times and error if not
+    Reads the 'Counties' sheet, extracts column header keys from row 2 (row 1 is
+    skipped), validates that all keys are enclosed in curly braces and appear exactly
+    once, removes columns with blank keys, and returns the keys list and the full data
+    DataFrame with values stripped of whitespace.
+
+    Args:
+        boe_xls_file: Path or string path to the BOE xlsx file.
+        key_check_list: Unused; reserved for future key validation. Defaults to None.
+        display_keys (bool): If True, display the keys list. Defaults to False.
+
+    Returns:
+        tuple: A (keys, county_sheet) pair where keys is a list of lowercase key strings
+            (e.g. ['{use}', '{state}', '{county}']) and county_sheet is a DataFrame
+            with all values read as strings and whitespace stripped.
+    """
+
+    def check_count(key_str: str, key_count: int, oper, num_allowed: int) -> None:
+        """Validates that a key count satisfies a given comparison; exits on failure.
 
         Args:
-            key_str (): key being checked, eg '{use}'
-            key_count (): number of key_str found
-            oper (): comparison passed as function from operator module eg operator.gt.  https://stackoverflow.com/questions/18591778/how-to-pass-an-operator-to-a-python-function
-            num_allowed (): comparison value
-            :param key_str:
-            :type key_str:
-            :param key_count:
-            :type key_count:
-            :param oper:
-            :type oper:
-            :param num_allowed:
-            :type num_allowed:
+            key_str (str): The key being checked (e.g. '{use}').
+            key_count (int): The actual number of occurrences found.
+            oper: A comparison function from the operator module (e.g. operator.eq).
+                See https://stackoverflow.com/questions/18591778
+            num_allowed (int): The value to compare against.
         """
 
         if not oper(key_count, num_allowed):

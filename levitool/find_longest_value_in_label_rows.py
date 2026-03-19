@@ -15,8 +15,15 @@ from uvbekutils import list_pick
 from read_boe_xls import read_boe_xls
 
 
-def get_label_text(label_docx):
-    """ get text from upper leftmost cell of label and return a text string with lines separated by '\n'"""
+def get_label_text(label_docx) -> str:
+    """Reads text from the upper-left cell of the first table in a label docx file.
+
+    Args:
+        label_docx: Path or string path to the label docx template file.
+
+    Returns:
+        str: Text from the upper-left label cell with lines joined by newline characters.
+    """
 
     # string or path?
     document_of_docx_file = Document(label_docx)
@@ -31,18 +38,19 @@ def get_label_text(label_docx):
 
 
 def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attachment_dir=None) -> None:
-    """
-    For checking length of lines in labels to be 'mail merged' by the Levitool. Length should be 34 or under.
-    Given a block of text lines separated by return chars, this will make substitutions of df fields listed in
-    field_list and print the longest substituted line and its length.
+    """Checks the maximum line length in a label template after mail-merge substitutions.
+
+    Prompts for the label docx and auto-detects the BOE xlsx from the same directory.
+    Substitutes all {KEY} tokens for every county row, then reports the longest line
+    per label line number. Displays results and character-limit reference tables for
+    common Avery label formats in a scroll box.
 
     Args:
-        initial_attachment_dir ():
-        label_docx (): template label used for substitutions.  Text is taken from upper left table cell.
-        # label_text (): a block of text pasted from a label docx with lines separated by return chars
-        # label_text_file (): a text file containing a block of text pasted from a label docx with lines separated by
-        return chars.  ASSUMED TO BE NAMED label.txt IN SAME DIR AS BOE xlsx
-        used_field (): field which represents used records in df, usually '{PRIORITY}'
+        used_field (str): Column key identifying active county rows (e.g. '{priority}').
+            Prompts if None.
+        label_docx: Path to the label docx template. Prompts via file picker if None.
+        initial_attachment_dir: Starting directory for the label docx file picker.
+            Used only when label_docx is None.
     """
 
     import pandas as pd
@@ -53,16 +61,16 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
     from uvbekutils import exit_yes, select_file
 
     def print_max_line_info(df: pd.DataFrame, line_list_field: str) -> str:
-        """
-        Calculates the longest line from a df cell containing a list of the substituted text, its length and prints
-        them.
+        """Finds and prints the longest substituted line for each line position in the label.
 
         Args:
-            df (): df with field info to be substituted in label text
-            line_list_field (): the field in df which contains a list of the lines with text substituted
+            df (pd.DataFrame): DataFrame where each row contains a list of substituted
+                label lines in the column specified by line_list_field.
+            line_list_field (str): Name of the column containing per-row lists of label lines.
 
         Returns:
-            str: formatted string with max line info for each line
+            str: Newline-joined summary of the longest line and its length for each
+                label line position, or 'None' if the DataFrame is empty.
         """
         if df.empty:
             pyautobek.alert(f"No counties are being selected based on the field '{used_field}'.\n\n"
@@ -272,8 +280,15 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
     scroll_box(alert_message, title="MAX LABEL LINE LENGTHS", wrap_lines=True )
 
 
-def find_keys_in_text(label_text):
-    """ Finds keys, fields in document to be replaced, in flat text"""
+def find_keys_in_text(label_text: str) -> set:
+    """Finds all {KEY} replacement tokens in a plain text string.
+
+    Args:
+        label_text (str): Text content from a label template, typically from get_label_text().
+
+    Returns:
+        set: Set of key strings found (e.g. {'{county}', '{phone}'}).
+    """
 
     import re
     keys = set(re.findall(r'{[a-zA-Z0-9]+}', safe_str(label_text)))
