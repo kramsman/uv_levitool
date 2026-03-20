@@ -1,5 +1,5 @@
 [project]
-name = "uv-levitool"
+name = "levitool"
 version = "0.2.0"
 description = "create script and label files from docx templates and input xlsx"
 requires-python = ">=3.12"
@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.scripts]
-levitool = "uv_levitool.LeviTool:main"
+levitool = "levitool:main"
 
 
 [build-system]
@@ -27,7 +27,7 @@ build-backend = "hatchling.build"
 allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
-packages = ["uv_levitool"]
+packages = ["levitool"]
 
 [tool.uv.sources]
 uvbekutils = { git = "https://github.com/kramsman/uvbekutils.git" }

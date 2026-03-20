@@ -12,6 +12,8 @@ from uvbekutils import pyautobek
 from uvbekutils import safe_str
 from uvbekutils import scroll_box
 from uvbekutils import list_pick
+from uvbekutils import standardize_columns
+
 from read_boe_xls import read_boe_xls
 from constants import MAX_CHARS_PER_LINE_TEXT, CHARS_PER_LINE_30PP
 
@@ -30,10 +32,9 @@ def get_label_text(label_docx) -> str:
     document_of_docx_file = Document(label_docx)
     d = deepcopy(document_of_docx_file)
 
-    # for line in d.tables[0].rows[0].cells[0].paragraphs:
+    # upper left label
     lines = [line.text for line in d.tables[0].rows[0].cells[0].paragraphs]
     label_text = '\n'.join(lines)
-    # line = d.tables[0].rows[0].cells[0].paragraphs[0]
     print(f"{label_text=}")
     return label_text
 
@@ -52,6 +53,14 @@ def get_label_font_sizes(label_docx) -> list:
             font_size_pt is a float or None if undetermined.
     """
     d = deepcopy(Document(label_docx))
+    default_size_pt = None
+    try:
+        default_size = d.styles['Normal'].font.size
+        if default_size is not None:
+            default_size_pt = default_size.pt
+    except Exception:
+        pass
+
     font_sizes = []
     for i, para in enumerate(d.tables[0].rows[0].cells[0].paragraphs):
         size_pt = None
@@ -62,6 +71,10 @@ def get_label_font_sizes(label_docx) -> list:
         if size_pt is None and para.style.font.size is not None:
             size_pt = para.style.font.size.pt
         font_sizes.append((i + 1, size_pt))
+
+    # Fill None entries using any detected size from other lines
+    detected = next((sz for _, sz in font_sizes if sz is not None), default_size_pt)
+    font_sizes = [(n, sz if sz is not None else detected) for n, sz in font_sizes]
     return font_sizes
 
 
@@ -91,7 +104,7 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
     def print_max_line_info(df: pd.DataFrame, line_list_field: str, font_sizes: list = None) -> str:
         """Finds and prints the longest substituted line for each line position in the label.
 
-        Compares max line length against the Avery 5161 30pp character limit for the
+        Compares max line length against the Avery 5160 30per page character limit for the
         detected font size and appends a warning if the line may run over.
 
         Args:
@@ -113,7 +126,7 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
                         "No Counties Being Selected")
             result = 'None'
         else:
-            # get number of list elements (# of lines) in the list field, so we know how many lines need to be checked
+            # get number of list elements (# of lines) in the label, so we know how many need to be checked
             number_of_lines = len(df[line_list_field].iloc[0])
             result_lines = []
             for line_number in range(number_of_lines):
@@ -154,12 +167,6 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
     keys = find_keys_in_text(label_text)
     keys = [key.lower() for key in keys]
 
-    # FIXME should tis be live?
-    # if boe_xls is None:
-    #     boe_xls = get_file_name("Pick BOE file (xlsx) with urls to check.",
-    #                              initial_dir=label_docx.parent,
-    #                              title2="Pick BOE file (xlsx)")
-    # logger.info(f"BOE xls being checked is: '{boe_xls}")
     # list of all xlsx files not starting with ~ (temporary files)
     xlsx_files = glob.glob(str(label_docx.parent / '[!~]*.xlsx'))
 
@@ -174,7 +181,6 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
 
     # Lowercase all column names to match lowercase keys
     df.columns = [col.lower() for col in df.columns]
-
 
     if used_field is None:
         used_field = list_pick(lst=df.columns,
@@ -249,9 +255,9 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
 
     # see explanation of expression above
     # Check for bad row where NAN is found somewhere in a key field.
-    nan_found_in_select_rows = (df[keys].loc[df[used_field].str.strip().notnull()] == 'nan') \
+    nan_found_in_select_rows = (df[keys].loc[df[used_field].str.strip() != ''] == 'nan') \
         .any(axis="columns").any(axis="rows")
-    df_nan = df[keys][(df[used_field].str.strip().notnull()) & (df[keys] == 'nan').any(axis="columns")]
+    df_nan = df[keys][(df[used_field].str.strip() != '') & (df[keys] == 'nan').any(axis="columns")]
     if nan_found_in_select_rows:
         print(f"\nThe following rows with non-blank '{used_field}' contain 'nan' somewhere in ALL 'key' columns")
         with pd.option_context('display.max_rows', None, 'display.max_columns', None, ):
@@ -266,7 +272,7 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
             "'nan' found in USED row keys")
     else:
         print(f"MAX LINES IN SUBSTITUTED SCRIPT INFO FOR USED SUB ROWS ('{used_field}' not blank)")
-        df_used_counties = df.loc[df[used_field].str.strip().notnull()]
+        df_used_counties = df.loc[df[used_field].str.strip() != '']
         result = print_max_line_info(df_used_counties, 'lines', font_sizes=label_font_sizes)
         max_line_results.append((f"'USED' COUNTIES ('{used_field}' not blank)", result, len(df_used_counties)))
         print()
