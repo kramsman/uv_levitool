@@ -18,6 +18,7 @@ and a working dir like "/Users/Denise/Library/CloudStorage/Dropbox/non ROV pytho
 
 # TODO currently blanks replaced with "' '" in df used_counties_df.  OK or should be blank? Or '.'?
 # TODO Check max length of fields not working. But it's in another version - levitool in non ROV Python?
+
 # run gitupdater to make sure bekutils and bekgoogle utility libraries are updated
 import sys
 import os
