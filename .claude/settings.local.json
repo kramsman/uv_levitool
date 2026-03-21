@@ -11,7 +11,9 @@
       "Bash(ls /Users/Denise/Library/CloudStorage/Dropbox/PythonPrograms/levitool-root/.venv/bin/python*)",
       "Bash(/Users/Denise/Library/CloudStorage/Dropbox/PythonPrograms/levitool-root/.venv/bin/python --version)",
       "Bash(/Users/Denise/Library/CloudStorage/Dropbox/PythonPrograms/levitool-root/.venv/bin/python -c \"import uvbekutils; print\\(''uvbekutils OK''\\)\")",
-      "Bash(/Users/Denise/Library/CloudStorage/Dropbox/PythonPrograms/levitool-root/.venv/bin/python -c \"import pandas; print\\(''pandas OK''\\)\")"
+      "Bash(/Users/Denise/Library/CloudStorage/Dropbox/PythonPrograms/levitool-root/.venv/bin/python -c \"import pandas; print\\(''pandas OK''\\)\")",
+      "Bash(uv python:*)",
+      "Bash(uv run:*)"
     ]
   }
 }
