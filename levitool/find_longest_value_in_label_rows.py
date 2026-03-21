@@ -4,6 +4,13 @@ Should be max of 34.
 
 # FIXME check if {priority} changes the number of rows used in count
 
+# run gitupdater to make sure bekutils and bekgoogle utility libraries are updated
+import sys
+import os
+sys.path.append(os.path.expanduser("~/Dropbox/Postcard Files/"))
+if True:
+    import gitupdater
+
 from copy import deepcopy
 from pathlib import Path
 
