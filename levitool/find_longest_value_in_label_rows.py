@@ -14,8 +14,8 @@ from uvbekutils import scroll_box
 from uvbekutils import list_pick
 from uvbekutils import standardize_columns
 
-from read_boe_xls import read_boe_xls
-from constants import MAX_CHARS_PER_LINE_TEXT, CHARS_PER_LINE_30PP
+from .read_boe_xls import read_boe_xls
+from .constants import MAX_CHARS_PER_LINE_TEXT, CHARS_PER_LINE_30PP
 
 
 def get_label_text(label_docx) -> str:

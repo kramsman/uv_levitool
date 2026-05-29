@@ -23,7 +23,7 @@ and a working dir like "/Users/Denise/Library/CloudStorage/Dropbox/non ROV pytho
 import sys
 import os
 sys.path.append(os.path.expanduser("~/Dropbox/Postcard Files/"))
-if True:
+if False:
    import gitupdater
 
 import subprocess
@@ -36,12 +36,12 @@ from pathlib import Path
 import pandas as pd
 from uvbekutils import exit_yes, exit_yes_no, setup_loguru, select_file
 from uvbekutils import pyautobek
-from check_boe_urls import check_boe_urls, check_short_boe_urls
+from .check_boe_urls import check_boe_urls, check_short_boe_urls
 from docx import Document  # package in Conda is python-docx, not simply docx
 from docx2pdf import convert
 from loguru import logger
-from find_longest_value_in_label_rows import max_label_lengths
-from constants import INITIAL_ATTACHMENT_DIR, PROGRAM_REQUIRED_KEYS, TEST_INPUT_DIR, TEST_SKIP_PROMPTS
+from .find_longest_value_in_label_rows import max_label_lengths
+from .constants import INITIAL_ATTACHMENT_DIR, PROGRAM_REQUIRED_KEYS, TEST_INPUT_DIR, TEST_SKIP_PROMPTS
 
 pd.options.mode.copy_on_write = True  # fix chain assignment forced in Pandas 3.0
 

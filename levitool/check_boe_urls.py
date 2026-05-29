@@ -130,7 +130,7 @@ def check_boe_urls(key_containing_url: str = None, key_for_used: str = None,
 
     # FIXME Open browser for all did not open any
 
-    from read_boe_xls import read_boe_xls
+    from .read_boe_xls import read_boe_xls
 
     if boe_xls is None:
         boe_xls = select_file(
@@ -230,7 +230,7 @@ def check_short_boe_urls(key_containing_short_url: str = None, key_containing_ur
         boe_xls: Path to the BOE xlsx file. Prompts via file picker if None.
     """
 
-    from read_boe_xls import read_boe_xls
+    from .read_boe_xls import read_boe_xls
 
     if boe_xls is None:
         # boe_xls = get_file_name("Pick BOE file (xlsx) with urls to check.",
