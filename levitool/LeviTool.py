@@ -23,8 +23,6 @@ and a working dir like "/Users/Denise/Library/CloudStorage/Dropbox/non ROV pytho
 import sys
 import os
 sys.path.append(os.path.expanduser("~/Dropbox/Postcard Files/"))
-if False:
-   import gitupdater
 
 import subprocess
 import glob
@@ -495,7 +493,7 @@ def main() -> None:
         return
 
     choice = pyautobek.confirm("What do you want to do?", title='Select',
-                      buttons=['LeviTool', 'Max Row Len', 'Check Urls', 'Check Short Urls', 'Exit'])
+                      buttons=['LeviTool', 'Max Row Len', 'Check Urls', 'Check Short Urls', 'Exit', 'XXX'])
     choice = choice.lower()
 
     if choice == 'levitool':
