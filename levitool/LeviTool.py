@@ -42,7 +42,7 @@ from .constants import INITIAL_ATTACHMENT_DIR, PROGRAM_REQUIRED_KEYS, TEST_INPUT
 
 pd.options.mode.copy_on_write = True  # fix chain assignment forced in Pandas 3.0
 
-setup_loguru("DEBUG", "DEBUG", )
+setup_loguru("INFO", "DEBUG", )
 
 
 def count_brackets(s: str) -> int:
@@ -283,11 +283,17 @@ def load_and_validate_excel(xlsx_file: str, required_keys: set) -> pd.DataFrame:
             stripped of whitespace and read as strings.
     """
 
+    logger.info(f"Required Levitool keys: {required_keys}")
+
     # Read just the header row to get keys
     county_sheet_df = pd.read_excel(xlsx_file, sheet_name='Counties', header=None, skiprows=1,
                                     nrows=1).astype(str)
     county_sheet_keys = county_sheet_df.loc[0, :].values.tolist()
-    county_sheet_keys = [x.upper() for x in county_sheet_keys if x != "nan"]
+    logger.info(f"Keys contained in county tab of BOE file: {county_sheet_keys}")
+    for key in county_sheet_keys:
+        logger.debug(f"county_sheet_keys field: value={key!r}, type={type(key)}")
+
+    county_sheet_keys = [x.upper() for x in county_sheet_keys if not pd.isna(x)]
 
     # Check that required tokens appear exactly once
     check_header_count('{USE}', county_sheet_keys.count('{USE}'), 1)
@@ -333,10 +339,10 @@ def filter_and_check_data(county_sheet: pd.DataFrame) -> pd.DataFrame:
         county_sheet (pd.DataFrame): Full county DataFrame with all columns including {USE}.
 
     Returns:
-        pd.DataFrame: Filtered DataFrame containing only rows where {USE} is not null.
+        pd.DataFrame: Filtered DataFrame containing only rows where {USE} is not null or empty.
     """
 
-    used_counties_df = county_sheet.loc[county_sheet['{USE}'].notnull()]
+    used_counties_df = county_sheet.loc[county_sheet['{USE}'].notnull() & (county_sheet['{USE}'] != "")]
     used_counties_df.replace([""], ["' '"], inplace=True)
 
     list_of_used_county_names = used_counties_df['{CNTYFILENAME}'].to_list()

@@ -15,7 +15,8 @@
       "Bash(uv python:*)",
       "Bash(uv run:*)",
       "Bash(bash -n \"/Users/Denise/Library/CloudStorage/Dropbox/Postcard Files/rovprogs.sh\")",
-      "Bash(zsh -n \"/Users/Denise/Library/CloudStorage/Dropbox/Postcard Files/rovprogs.sh\")"
+      "Bash(zsh -n \"/Users/Denise/Library/CloudStorage/Dropbox/Postcard Files/rovprogs.sh\")",
+      "Bash(python3 *)"
     ]
   }
 }
