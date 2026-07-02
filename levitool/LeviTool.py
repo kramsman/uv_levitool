@@ -373,7 +373,7 @@ def filter_and_check_data(county_sheet: pd.DataFrame) -> pd.DataFrame:
         pyautobek.alert("Some info to be merged contains spaces.\n\nSee log.", "ERROR: Used data contains spaces")
 
     if not TEST_SKIP_PROMPTS:
-        exit_yes_no("Close MS Word if open and continue?\n\nContinue?", 'Continue or Exit?')
+        exit_yes_no("This will close MS Word if open\n\nContinue?", 'Continue or Exit?')
 
     return used_counties_df
 
