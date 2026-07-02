@@ -279,11 +279,16 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
         max_line_results.append(("ALL ROWS", result, len(df)))
         print()
 
+    # A row is "used" when its used_field is genuinely non-blank: not empty,
+    # not whitespace, and not a missing value (read as <NA> or the literal 'nan').
+    used_vals = df[used_field].fillna('').astype(str).str.strip()
+    used_mask = (used_vals != '') & (used_vals.str.lower() != 'nan')
+
     # see explanation of expression above
     # Check for bad row where NAN is found somewhere in a key field.
-    nan_found_in_select_rows = (df[keys].loc[df[used_field].str.strip() != ''] == 'nan') \
+    nan_found_in_select_rows = (df[keys].loc[used_mask] == 'nan') \
         .any(axis="columns").any(axis="rows")
-    df_nan = df[keys][(df[used_field].str.strip() != '') & (df[keys] == 'nan').any(axis="columns")]
+    df_nan = df[keys][used_mask & (df[keys] == 'nan').any(axis="columns")]
     if nan_found_in_select_rows:
         print(f"\nThe following rows with non-blank '{used_field}' contain 'nan' somewhere in ALL 'key' columns")
         with pd.option_context('display.max_rows', None, 'display.max_columns', None, ):
@@ -298,7 +303,7 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
             "'nan' found in USED row keys")
     else:
         print(f"MAX LINES IN SUBSTITUTED SCRIPT INFO FOR USED SUB ROWS ('{used_field}' not blank)")
-        df_used_counties = df.loc[df[used_field].str.strip() != '']
+        df_used_counties = df.loc[used_mask]
         result = print_max_line_info(df_used_counties, 'lines', font_sizes=label_font_sizes)
         max_line_results.append((f"'USED' COUNTIES ('{used_field}' not blank)", result, len(df_used_counties)))
         print()
