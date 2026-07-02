@@ -22,7 +22,11 @@
       "Bash(.venv/bin/python -c ' *)",
       "Bash(timeout 60 .venv/bin/python -c ' *)",
       "Bash(.venv/bin/python -c \"import levitool.find_longest_value_in_label_rows; print\\('module import OK'\\)\")",
-      "Bash(plutil -p \"/Users/Denise/Applications/PyCharm Community Edition.app/Contents/Info.plist\")"
+      "Bash(plutil -p \"/Users/Denise/Applications/PyCharm Community Edition.app/Contents/Info.plist\")",
+      "Bash(pip show *)",
+      "Bash(.venv/bin/python -m pip install -e /Users/Denise/Library/CloudStorage/Dropbox/PythonPrograms/uvbekutils)",
+      "Bash(uv pip *)",
+      "Bash(.venv/bin/python *)"
     ]
   }
 }

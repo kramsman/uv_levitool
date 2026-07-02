@@ -333,7 +333,7 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
 
     alert_message = '\n'.join(alert_lines)
     # pyautobek.alert(alert_message, "MAX LABEL LINE LENGTHS")
-    scroll_box(alert_message, title="MAX LABEL LINE LENGTHS", wrap_lines=False )
+    scroll_box(alert_message, title="MAX LABEL LINE LENGTHS", wrap_lines=False, width=1200, height=600)
 
 
 def find_keys_in_text(label_text: str) -> set:
