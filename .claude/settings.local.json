@@ -16,7 +16,13 @@
       "Bash(uv run:*)",
       "Bash(bash -n \"/Users/Denise/Library/CloudStorage/Dropbox/Postcard Files/rovprogs.sh\")",
       "Bash(zsh -n \"/Users/Denise/Library/CloudStorage/Dropbox/Postcard Files/rovprogs.sh\")",
-      "Bash(python3 *)"
+      "Bash(python3 *)",
+      "Bash(python -c \"import uvbekutils, os; print\\(os.path.dirname\\(uvbekutils.__file__\\)\\)\")",
+      "Read(//Users/Denise/Library/CloudStorage/Dropbox/Postcard Files/Attachments/Campaigns/GA General 6-2026/Input/**)",
+      "Bash(.venv/bin/python -c ' *)",
+      "Bash(timeout 60 .venv/bin/python -c ' *)",
+      "Bash(.venv/bin/python -c \"import levitool.find_longest_value_in_label_rows; print\\('module import OK'\\)\")",
+      "Bash(plutil -p \"/Users/Denise/Applications/PyCharm Community Edition.app/Contents/Info.plist\")"
     ]
   }
 }

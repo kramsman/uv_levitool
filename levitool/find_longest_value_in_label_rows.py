@@ -136,7 +136,7 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
 
                 size_pt = font_sizes[line_number][1] if font_sizes and line_number < len(font_sizes) else None
                 limit = CHARS_PER_LINE_30PP.get(int(size_pt)) if size_pt else None
-                warning = "  ** may run over-check" if limit and max_line_length > limit else ""
+                warning = "  ** may run over-check" if limit and max_line_length > limit else (f"  Limit allowed: {limit}")
                 if size_pt and limit:
                     size_str = f"  {size_pt} pt ({limit} allowed)"
                 elif size_pt:
@@ -324,7 +324,17 @@ if __name__ == '__main__':
     INITIAL_ATTACHMENT_DIR = Path("~/Dropbox/Postcard Files/Attachments/Campaigns").expanduser()
     # LENGTH_CHECK_FIELDS_SELECT = '{priority}'
     LENGTH_CHECK_FIELDS_SELECT = '{use}'
+
+    # Interactive GUI call (file picker + field picker dialogs). Use Run (not Debug):
+    # Qt modal dialogs freeze under PyCharm's debugger on Python 3.12.
     max_label_lengths(used_field=None, initial_attachment_dir=INITIAL_ATTACHMENT_DIR, )
+
+    # DEBUG (dialog-free) alternative — hard-code inputs, skips select_file / list_pick:
+    # max_label_lengths(
+    #     used_field='{use}',
+    #     label_docx=Path("~/Dropbox/Postcard Files/Attachments/Campaigns/GA General 6-2026/Input/"
+    #                     "LABELS-30 per page GA General 6-15-26.docx").expanduser(),
+    # )
 
     a = 1
     # Label text is copied here.  Lines are trimmed.
