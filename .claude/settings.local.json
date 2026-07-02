@@ -26,7 +26,8 @@
       "Bash(pip show *)",
       "Bash(.venv/bin/python -m pip install -e /Users/Denise/Library/CloudStorage/Dropbox/PythonPrograms/uvbekutils)",
       "Bash(uv pip *)",
-      "Bash(.venv/bin/python *)"
+      "Bash(.venv/bin/python *)",
+      "Bash(grep -v \"^$\")"
     ]
   }
 }

@@ -4,6 +4,7 @@ Should be max of 34.
 
 # FIXME check if {priority} changes the number of rows used in count
 
+import math
 from copy import deepcopy
 from pathlib import Path
 
@@ -150,7 +151,9 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
                 size_tuple = font_sizes[line_number] if font_sizes and line_number < len(font_sizes) else (None, None, False)
                 size_pt = size_tuple[1]
                 estimated = size_tuple[2] if len(size_tuple) > 2 else False
-                limit = CHARS_PER_LINE_30PP.get(int(size_pt)) if size_pt else None
+                # Round the size UP to the next whole point so fractional sizes (e.g. 9.5)
+                # use the stricter limit (10 pt), keeping the fit check conservative.
+                limit = CHARS_PER_LINE_30PP.get(math.ceil(size_pt)) if size_pt else None
                 est_str = ", est." if estimated else ""
                 # Show whole sizes as "10 pt", fractional as "9.5 pt".
                 size_num = f"{size_pt:g}" if size_pt else ""
