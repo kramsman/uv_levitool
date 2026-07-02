@@ -155,7 +155,7 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
                 # Show whole sizes as "10 pt", fractional as "9.5 pt".
                 size_num = f"{size_pt:g}" if size_pt else ""
 
-                at_str = f" at {size_num} pt" if size_pt else ""
+                meta_str = f"  - {size_num} pt, {max_line_length} chars" if size_pt else f"  - {max_line_length} chars"
                 over = bool(limit and max_line_length > limit)
                 if over:
                     # Largest font size whose char limit still fits this line (table covers 8-14 pt).
@@ -174,7 +174,7 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
                     allowed_str = ""
                     warning = ""
 
-                line_info = f"Line {line_number + 1},  {max_line_length} chars{at_str}:   '{max_line}'{allowed_str}{warning}"
+                line_info = f"Line {line_number + 1},  '{max_line}'{meta_str}{allowed_str}{warning}"
                 print(line_info)
                 result_lines.append(line_info)
                 result = '\n'.join(result_lines)
