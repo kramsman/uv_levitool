@@ -158,8 +158,12 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
                 at_str = f" at {size_num} pt" if size_pt else ""
                 over = bool(limit and max_line_length > limit)
                 if over:
+                    # Largest font size whose char limit still fits this line (table covers 8-14 pt).
+                    suggested = max((sz for sz, lim in CHARS_PER_LINE_30PP.items() if lim >= max_line_length),
+                                    default=None)
+                    fit_str = f"  try {suggested} pt" if suggested else "  won't fit - shorten text"
                     allowed_str = f"   - **** {limit} chars allowed{est_str}"
-                    warning = " **** may run over-check!"
+                    warning = f" ****   may run over-check!{fit_str}"
                 elif limit:
                     allowed_str = f"   - {limit} chars allowed{est_str}"
                     warning = ""
