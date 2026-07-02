@@ -15,7 +15,7 @@ from uvbekutils import list_pick
 from uvbekutils import standardize_columns
 
 from .read_boe_xls import read_boe_xls
-from .constants import MAX_CHARS_PER_LINE_TEXT, CHARS_PER_LINE_30PP
+from .constants import MAX_CHARS_PER_LINE_TEXT, CHARS_PER_LINE_30PP, DEFAULT_FONT_SIZE_PT
 
 
 def get_label_text(label_docx) -> str:
@@ -40,41 +40,54 @@ def get_label_text(label_docx) -> str:
 
 
 def get_label_font_sizes(label_docx) -> list:
-    """Returns the detected font size (in points) for each paragraph line in the label cell.
+    """Returns the font size (in points) for each paragraph line in the label cell.
 
-    Checks each run's font size first, then falls back to the paragraph style font size.
-    Returns None for a line if the size cannot be determined (inherited from document default).
+    Reads the Latin font size (w:sz) from the run, then the paragraph style, then the
+    paragraph mark. When no Latin size is set, falls back to the complex-script size
+    (w:szCs) and finally to DEFAULT_FONT_SIZE_PT; such lines are flagged as estimated
+    because the value was inferred, not read from an explicit Latin size.
 
     Args:
         label_docx: Path or string path to the label docx template file.
 
     Returns:
-        list: List of (line_number, font_size_pt) tuples, one per paragraph in the label cell.
-            font_size_pt is a float or None if undetermined.
+        list: List of (line_number, font_size_pt, estimated) tuples, one per paragraph
+            in the label cell. font_size_pt is a float; estimated is True when the size
+            was inferred from w:szCs or the default rather than read from w:sz.
     """
+    from docx.oxml.ns import qn
+
     d = deepcopy(Document(label_docx))
-    default_size_pt = None
-    try:
-        default_size = d.styles['Normal'].font.size
-        if default_size is not None:
-            default_size_pt = default_size.pt
-    except Exception:
-        pass
 
     font_sizes = []
     for i, para in enumerate(d.tables[0].rows[0].cells[0].paragraphs):
         size_pt = None
+        # 1. Explicit Latin size on a run.
         for run in para.runs:
             if run.font.size is not None:
                 size_pt = run.font.size.pt
                 break
+        # 2. The paragraph's named style.
         if size_pt is None and para.style.font.size is not None:
             size_pt = para.style.font.size.pt
-        font_sizes.append((i + 1, size_pt))
+        # 3. Latin size on the paragraph mark (w:pPr/w:rPr/w:sz, in half-points).
+        if size_pt is None:
+            sz = para._p.find(qn('w:pPr') + '/' + qn('w:rPr') + '/' + qn('w:sz'))
+            if sz is not None and sz.get(qn('w:val')) is not None:
+                size_pt = int(sz.get(qn('w:val'))) / 2
 
-    # Fill None entries using any detected size from other lines
-    detected = next((sz for _, sz in font_sizes if sz is not None), default_size_pt)
-    font_sizes = [(n, sz if sz is not None else detected) for n, sz in font_sizes]
+        estimated = False
+        if size_pt is None:
+            # No Latin size anywhere: fall back to the complex-script size (w:szCs),
+            # then to the default. These are estimates, not the real Latin size.
+            estimated = True
+            szcs = next(iter(para._p.iter(qn('w:szCs'))), None)
+            if szcs is not None and szcs.get(qn('w:val')) is not None:
+                size_pt = int(szcs.get(qn('w:val'))) / 2  # half-points -> points
+            else:
+                size_pt = DEFAULT_FONT_SIZE_PT
+
+        font_sizes.append((i + 1, size_pt, estimated))
     return font_sizes
 
 
@@ -134,17 +147,30 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
                 max_line = max(line_data, key=len)
                 max_line_length = len(max_line)
 
-                size_pt = font_sizes[line_number][1] if font_sizes and line_number < len(font_sizes) else None
+                size_tuple = font_sizes[line_number] if font_sizes and line_number < len(font_sizes) else (None, None, False)
+                size_pt = size_tuple[1]
+                estimated = size_tuple[2] if len(size_tuple) > 2 else False
                 limit = CHARS_PER_LINE_30PP.get(int(size_pt)) if size_pt else None
-                warning = "  ** may run over-check" if limit and max_line_length > limit else (f"  Limit allowed: {limit}")
-                if size_pt and limit:
-                    size_str = f"  {size_pt} pt ({limit} allowed)"
-                elif size_pt:
-                    size_str = f"  {size_pt} pt"
-                else:
-                    size_str = ""
+                est_str = ", est." if estimated else ""
+                # Show whole sizes as "10 pt", fractional as "9.5 pt".
+                size_num = f"{size_pt:g}" if size_pt else ""
 
-                line_info = f"line {line_number + 1},  max: {max_line_length}   '{max_line}'{size_str}{warning}"
+                at_str = f" at {size_num} pt" if size_pt else ""
+                over = bool(limit and max_line_length > limit)
+                if over:
+                    allowed_str = f"   - **** {limit} chars allowed{est_str}"
+                    warning = " **** may run over-check!"
+                elif limit:
+                    allowed_str = f"   - {limit} chars allowed{est_str}"
+                    warning = ""
+                elif size_pt:
+                    allowed_str = f"   - limit unknown{est_str}"
+                    warning = ""
+                else:
+                    allowed_str = ""
+                    warning = ""
+
+                line_info = f"Line {line_number + 1},  {max_line_length} chars{at_str}:   '{max_line}'{allowed_str}{warning}"
                 print(line_info)
                 result_lines.append(line_info)
                 result = '\n'.join(result_lines)
@@ -302,7 +328,7 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
 
     alert_message = '\n'.join(alert_lines)
     # pyautobek.alert(alert_message, "MAX LABEL LINE LENGTHS")
-    scroll_box(alert_message, title="MAX LABEL LINE LENGTHS", wrap_lines=True )
+    scroll_box(alert_message, title="MAX LABEL LINE LENGTHS", wrap_lines=False )
 
 
 def find_keys_in_text(label_text: str) -> set:

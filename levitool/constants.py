@@ -11,6 +11,10 @@ PROGRAM_REQUIRED_KEYS = {'{STATE}', '{CNTYFILENAME}', '{USE}'}
 TEST_INPUT_DIR = False       # skip file picker, use hardcoded input path
 TEST_SKIP_PROMPTS = False    # skip exit_yes_no confirmation dialogs
 
+# Assumed font size (pt) when a label line specifies no readable Latin size (w:sz).
+# Matches Word's built-in fallback when nothing in the file specifies a size.
+DEFAULT_FONT_SIZE_PT = 10
+
 # Lower-end characters per line for 30 per page Avery 5161 label, keyed by font size (pt)
 CHARS_PER_LINE_30PP = {
     8: 52,
