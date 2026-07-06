@@ -27,7 +27,9 @@
       "Bash(.venv/bin/python -m pip install -e /Users/Denise/Library/CloudStorage/Dropbox/PythonPrograms/uvbekutils)",
       "Bash(uv pip *)",
       "Bash(.venv/bin/python *)",
-      "Bash(grep -v \"^$\")"
+      "Bash(grep -v \"^$\")",
+      "Bash(grep -iE '\\\\.xlsx$')",
+      "Bash(echo \"--- exit status: $? ---\")"
     ]
   }
 }

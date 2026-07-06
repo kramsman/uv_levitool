@@ -4,7 +4,6 @@ Should be max of 34.
 
 # FIXME check if {priority} changes the number of rows used in count
 
-import math
 from copy import deepcopy
 from pathlib import Path
 
@@ -16,7 +15,8 @@ from uvbekutils import list_pick
 from uvbekutils import standardize_columns
 
 from .read_boe_xls import read_boe_xls
-from .constants import MAX_CHARS_PER_LINE_TEXT, CHARS_PER_LINE_30PP, DEFAULT_FONT_SIZE_PT
+from .constants import DEFAULT_FONT_SIZE_PT
+from .label_width import resolve_font, width_pt, max_fitting_size_pt, DEFAULT_FAMILY
 
 
 def get_label_text(label_docx) -> str:
@@ -40,65 +40,191 @@ def get_label_text(label_docx) -> str:
     return label_text
 
 
-def get_label_font_sizes(label_docx) -> list:
-    """Returns the font size (in points) for each paragraph line in the label cell.
+def _para_size(para):
+    """Returns (size_pt, estimated) for a paragraph.
 
     Reads the Latin font size (w:sz) from the run, then the paragraph style, then the
     paragraph mark. When no Latin size is set, falls back to the complex-script size
-    (w:szCs) and finally to DEFAULT_FONT_SIZE_PT; such lines are flagged as estimated
+    (w:szCs) and finally to DEFAULT_FONT_SIZE_PT; estimated is True in that case
     because the value was inferred, not read from an explicit Latin size.
+    """
+    from docx.oxml.ns import qn
+
+    size_pt = None
+    # 1. Explicit Latin size on a run.
+    for run in para.runs:
+        if run.font.size is not None:
+            size_pt = run.font.size.pt
+            break
+    # 2. The paragraph's named style.
+    if size_pt is None and para.style is not None and para.style.font.size is not None:
+        size_pt = para.style.font.size.pt
+    # 3. Latin size on the paragraph mark (w:pPr/w:rPr/w:sz, in half-points).
+    if size_pt is None:
+        sz = para._p.find(qn('w:pPr') + '/' + qn('w:rPr') + '/' + qn('w:sz'))
+        if sz is not None and sz.get(qn('w:val')) is not None:
+            size_pt = int(sz.get(qn('w:val'))) / 2
+
+    estimated = False
+    if size_pt is None:
+        # No Latin size anywhere: fall back to the complex-script size (w:szCs),
+        # then to the default. These are estimates, not the real Latin size.
+        estimated = True
+        szcs = next(iter(para._p.iter(qn('w:szCs'))), None)
+        if szcs is not None and szcs.get(qn('w:val')) is not None:
+            size_pt = int(szcs.get(qn('w:val'))) / 2  # half-points -> points
+        else:
+            size_pt = DEFAULT_FONT_SIZE_PT
+
+    return size_pt, estimated
+
+
+def _para_bold(para) -> bool:
+    """True when any text-bearing run in the paragraph is bold.
+
+    Word splits a line (and even a single {token}) across several runs with mixed
+    formatting, so rather than measure each run separately we treat the whole line as
+    bold if any of its visible text is bold. Bold text is wider, so this errs toward
+    warning about overflow (the safe direction) and matches the simplification that a
+    partly-bold line is measured as fully bold.
+    """
+    style_bold = bool(para.style and para.style.font.bold)
+    for run in para.runs:
+        if not run.text.strip():
+            continue
+        b = run.font.bold
+        if b is None:
+            b = style_bold
+        if b:
+            return True
+    return False
+
+
+def _para_font(para):
+    """Returns the dominant font family name for a paragraph, or None if unset.
+
+    Weights each run's font by its text length and returns the family covering the
+    most characters, so a short differently-fonted run does not swing the result.
+    Returns None when no run and no style names a font (the caller then assumes the
+    default family).
+    """
+    counts = {}
+    for run in para.runs:
+        n = len(run.text)
+        if n == 0:
+            continue
+        name = run.font.name
+        if name is None and para.style is not None:
+            name = para.style.font.name
+        if name:
+            counts[name] = counts.get(name, 0) + n
+    if counts:
+        return max(counts, key=counts.get)
+    if para.style is not None and para.style.font.name:
+        return para.style.font.name
+    return None
+
+
+def get_label_line_font_info(label_docx) -> list:
+    """Returns per-line font info for the label cell used to measure real line width.
 
     Args:
         label_docx: Path or string path to the label docx template file.
 
     Returns:
-        list: List of (line_number, font_size_pt, estimated) tuples, one per paragraph
-            in the label cell. font_size_pt is a float; estimated is True when the size
-            was inferred from w:szCs or the default rather than read from w:sz.
+        list: One dict per paragraph in the label cell, in order, with keys:
+            'line' (1-based number), 'size' (point size, float), 'estimated' (True when
+            the size was inferred rather than read from an explicit Latin size), 'bold'
+            (True when any visible text on the line is bold), and 'font' (dominant font
+            family name, or None when none is specified).
+    """
+    d = deepcopy(Document(label_docx))
+    info = []
+    for i, para in enumerate(d.tables[0].rows[0].cells[0].paragraphs):
+        size_pt, estimated = _para_size(para)
+        info.append({
+            'line': i + 1,
+            'size': size_pt,
+            'estimated': estimated,
+            'bold': _para_bold(para),
+            'font': _para_font(para),
+        })
+    return info
+
+
+def get_label_cell_usable_width_pt(label_docx) -> float:
+    """Returns the usable text width (in points) of the label's upper-left cell.
+
+    Usable width is the cell width minus its left and right margins. The cell width is
+    read from w:tcW (falling back to the table grid column), and margins from the cell's
+    own w:tcMar, then the table default w:tblCellMar; when no margin is specified,
+    Word's default of 108 twips (0.075 in) per side is assumed. Returns None if the cell
+    width cannot be determined. Twips are converted at 20 twips per point.
+
+    Args:
+        label_docx: Path or string path to the label docx template file.
+
+    Returns:
+        float: Usable cell width in points, or None if it cannot be determined.
     """
     from docx.oxml.ns import qn
 
+    # Word's default table cell side margin when none is specified.
+    DEFAULT_SIDE_MARGIN_TWIPS = 108
+
     d = deepcopy(Document(label_docx))
+    tbl = d.tables[0]
+    cell = tbl.rows[0].cells[0]
+    tcPr = cell._tc.find(qn('w:tcPr'))
 
-    font_sizes = []
-    for i, para in enumerate(d.tables[0].rows[0].cells[0].paragraphs):
-        size_pt = None
-        # 1. Explicit Latin size on a run.
-        for run in para.runs:
-            if run.font.size is not None:
-                size_pt = run.font.size.pt
-                break
-        # 2. The paragraph's named style.
-        if size_pt is None and para.style.font.size is not None:
-            size_pt = para.style.font.size.pt
-        # 3. Latin size on the paragraph mark (w:pPr/w:rPr/w:sz, in half-points).
-        if size_pt is None:
-            sz = para._p.find(qn('w:pPr') + '/' + qn('w:rPr') + '/' + qn('w:sz'))
-            if sz is not None and sz.get(qn('w:val')) is not None:
-                size_pt = int(sz.get(qn('w:val'))) / 2
+    def _w(element):
+        """Reads a w:w attribute (twips) off an element, or None."""
+        if element is None:
+            return None
+        val = element.get(qn('w:w'))
+        return int(val) if val is not None else None
 
-        estimated = False
-        if size_pt is None:
-            # No Latin size anywhere: fall back to the complex-script size (w:szCs),
-            # then to the default. These are estimates, not the real Latin size.
-            estimated = True
-            szcs = next(iter(para._p.iter(qn('w:szCs'))), None)
-            if szcs is not None and szcs.get(qn('w:val')) is not None:
-                size_pt = int(szcs.get(qn('w:val'))) / 2  # half-points -> points
-            else:
-                size_pt = DEFAULT_FONT_SIZE_PT
+    # Cell width: prefer the cell's own w:tcW, else the first grid column.
+    cell_w = _w(tcPr.find(qn('w:tcW'))) if tcPr is not None else None
+    if cell_w is None:
+        grid_col = tbl._tbl.find(qn('w:tblGrid') + '/' + qn('w:gridCol'))
+        cell_w = _w(grid_col)
+    if cell_w is None:
+        return None
 
-        font_sizes.append((i + 1, size_pt, estimated))
-    return font_sizes
+    def _side_margin(container, mar_tag, side):
+        """Reads a left/right margin (twips) from a *Mar element, or None."""
+        if container is None:
+            return None
+        mar = container.find(qn(mar_tag))
+        if mar is None:
+            return None
+        return _w(mar.find(qn('w:' + side)))
+
+    tblPr = tbl._tbl.tblPr
+    left = _side_margin(tcPr, 'w:tcMar', 'left')
+    if left is None:
+        left = _side_margin(tblPr, 'w:tblCellMar', 'left')
+    if left is None:
+        left = DEFAULT_SIDE_MARGIN_TWIPS
+    right = _side_margin(tcPr, 'w:tcMar', 'right')
+    if right is None:
+        right = _side_margin(tblPr, 'w:tblCellMar', 'right')
+    if right is None:
+        right = DEFAULT_SIDE_MARGIN_TWIPS
+
+    usable_twips = cell_w - left - right
+    return usable_twips / 20.0  # 20 twips per point
 
 
 def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attachment_dir=None) -> None:
     """Checks the maximum line length in a label template after mail-merge substitutions.
 
     Prompts for the label docx and auto-detects the BOE xlsx from the same directory.
-    Substitutes all {KEY} tokens for every county row, then reports the longest line
-    per label line number. Displays results and character-limit reference tables for
-    common Avery label formats in a scroll box.
+    Substitutes all {KEY} tokens for every county row, then reports the widest line
+    per label line number, measuring each line's real rendered width (actual font,
+    size, and weight) against the label cell's usable width. Displays results and any
+    overflow warnings in a scroll box.
 
     Args:
         used_field (str): Column key identifying active county rows (e.g. '{priority}').
@@ -115,23 +241,28 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
     import glob
     from uvbekutils import exit_yes, select_file
 
-    def print_max_line_info(df: pd.DataFrame, line_list_field: str, font_sizes: list = None) -> str:
-        """Finds and prints the longest substituted line for each line position in the label.
+    def print_max_line_info(df: pd.DataFrame, line_list_field: str, line_fonts: list = None,
+                            usable_width_pt: float = None) -> str:
+        """Finds and prints the widest substituted line for each line position in the label.
 
-        Compares max line length against the Avery 5160 30per page character limit for the
-        detected font size and appends a warning if the line may run over.
+        Measures each substituted line's real rendered width in its actual font family,
+        point size, and weight, then compares against the label cell's usable width and
+        appends a warning (with a suggested smaller size) if the line will not fit. The
+        widest line is chosen by measured width, not character count, because fonts are
+        proportional.
 
         Args:
             df (pd.DataFrame): DataFrame where each row contains a list of substituted
                 label lines in the column specified by line_list_field.
             line_list_field (str): Name of the column containing per-row lists of label lines.
-            font_sizes (list): Optional list of (line_number, font_size_pt) from
-                get_label_font_sizes(). Used to check character limits per line.
+            line_fonts (list): Optional list of per-line font-info dicts from
+                get_label_line_font_info(), giving each line's size, bold, and font family.
+            usable_width_pt (float): Usable cell width in points from
+                get_label_cell_usable_width_pt(); the fit limit for every line.
 
         Returns:
-            str: Newline-joined summary of the longest line, its length, font size, and
-                any overrun warning for each label line position, or 'None' if the DataFrame
-                is empty.
+            str: Newline-joined summary of the widest line, its size/font/width, and any
+                overflow warning for each label line position, or 'None' if empty.
         """
         if df.empty:
             pyautobek.alert(f"No counties are being selected based on the field '{used_field}'.\n\n"
@@ -145,39 +276,56 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
             result_lines = []
             for line_number in range(number_of_lines):
                 line_data = [line[line_number] for line in df[line_list_field]]
-                max_line = max(line_data, key=len)
-                max_line_length = len(max_line)
 
-                size_tuple = font_sizes[line_number] if font_sizes and line_number < len(font_sizes) else (None, None, False)
-                size_pt = size_tuple[1]
-                estimated = size_tuple[2] if len(size_tuple) > 2 else False
-                # Round the size UP to the next whole point so fractional sizes (e.g. 9.5)
-                # use the stricter limit (10 pt), keeping the fit check conservative.
-                limit = CHARS_PER_LINE_30PP.get(math.ceil(size_pt)) if size_pt else None
-                est_str = ", est." if estimated else ""
-                # Show whole sizes as "10 pt", fractional as "9.5 pt".
-                size_num = f"{size_pt:g}" if size_pt else ""
+                info = line_fonts[line_number] if line_fonts and line_number < len(line_fonts) else {}
+                size_pt = info.get('size')
+                estimated = info.get('estimated', False)
+                bold = info.get('bold', False)
+                font = info.get('font')
+                font_assumed = font is None  # no font named in the docx; default assumed
 
-                meta_str = f"  - {size_num} pt, {max_line_length} chars" if size_pt else f"  - {max_line_length} chars"
-                over = bool(limit and max_line_length > limit)
-                if over:
-                    # Largest font size whose char limit still fits this line (table covers 8-14 pt).
-                    suggested = max((sz for sz, lim in CHARS_PER_LINE_30PP.items() if lim >= max_line_length),
-                                    default=None)
-                    fit_str = f"  try {suggested} pt" if suggested else "  won't fit - shorten text"
-                    allowed_str = f"   - **** {limit} chars allowed{est_str}"
-                    warning = f" ****   may run over-check!{fit_str}"
-                elif limit:
-                    allowed_str = f"   - {limit} chars allowed{est_str}"
-                    warning = ""
-                elif size_pt:
-                    allowed_str = f"   - limit unknown{est_str}"
-                    warning = ""
+                # Resolve the real font file once; measure every candidate line's width
+                # and keep the widest by RENDERED width (not char count, since fonts are
+                # proportional). font_path is None only if no usable font was found.
+                font_path, family_used, fallback = resolve_font(font, bold)
+                measured = None
+                if size_pt and font_path:
+                    widths = [(ln, width_pt(font_path, ln, size_pt)) for ln in line_data]
+                    max_line, measured = max(widths, key=lambda t: t[1])
                 else:
-                    allowed_str = ""
+                    max_line = max(line_data, key=len)
+
+                size_num = f"{size_pt:g}" if size_pt else ""
+                weight_str = " bold" if bold else ""
+                # Note when the family or size had to be assumed rather than read.
+                notes = []
+                if estimated:
+                    notes.append("size est.")
+                if font_assumed or fallback:
+                    notes.append(f"font assumed {family_used}")
+                note_str = f" ({', '.join(notes)})" if notes else ""
+                font_str = f" {family_used}" if size_pt else ""
+
+                if measured is not None and usable_width_pt:
+                    over = measured > usable_width_pt
+                    meta_str = (f"  - {size_num} pt{weight_str}{font_str}, "
+                                f"{measured:.0f} of {usable_width_pt:.0f} pt wide{note_str}")
+                    if over:
+                        suggested = max_fitting_size_pt(font_path, max_line, size_pt, usable_width_pt)
+                        if suggested and suggested >= 5:
+                            fit_str = f"try {suggested:g} pt"
+                        else:
+                            fit_str = "shorten text - won't fit"
+                        warning = f"   - **** TOO WIDE - {fit_str} ****"
+                    else:
+                        warning = "   - fits"
+                else:
+                    # No font metrics available (font size unknown or no font found):
+                    # report the longest line by character count without a verdict.
+                    meta_str = f"  - {len(max_line)} chars (width not measured{note_str})"
                     warning = ""
 
-                line_info = f"Line {line_number + 1},  '{max_line}'{meta_str}{allowed_str}{warning}"
+                line_info = f"Line {line_number + 1},  '{max_line}'{meta_str}{warning}"
                 print(line_info)
                 result_lines.append(line_info)
                 result = '\n'.join(result_lines)
@@ -196,7 +344,9 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
     label_docx = Path(label_docx).expanduser()
 
     label_text = get_label_text(label_docx)
-    label_font_sizes = get_label_font_sizes(label_docx)
+    label_line_fonts = get_label_line_font_info(label_docx)
+    usable_width_pt = get_label_cell_usable_width_pt(label_docx)
+    logger.info(f"Label cell usable width: {usable_width_pt} pt")
     keys = find_keys_in_text(label_text)
     keys = [key.lower() for key in keys]
 
@@ -276,13 +426,15 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
             print(df_non_nan[keys])
             print()
             print("MAX LINES IN SUBSTITUTED SCRIPT INFO FOR ALL ROWS WITH NO NAN VALUES")
-            result = print_max_line_info(df_non_nan, 'lines', font_sizes=label_font_sizes)
+            result = print_max_line_info(df_non_nan, 'lines', line_fonts=label_line_fonts,
+                                         usable_width_pt=usable_width_pt)
             max_line_results.append(("ALL ROWS WITH NO NAN VALUES", result, len(df_non_nan)))
         print()
         a = 1
     else:
         print("MAX LINES IN SUBSTITUTED SCRIPT INFO FOR ALL ROWS")
-        result = print_max_line_info(df, 'lines', font_sizes=label_font_sizes)
+        result = print_max_line_info(df, 'lines', line_fonts=label_line_fonts,
+                                     usable_width_pt=usable_width_pt)
         max_line_results.append(("ALL ROWS", result, len(df)))
         print()
 
@@ -311,7 +463,8 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
     else:
         print(f"MAX LINES IN SUBSTITUTED SCRIPT INFO FOR USED SUB ROWS ('{used_field}' not blank)")
         df_used_counties = df.loc[used_mask]
-        result = print_max_line_info(df_used_counties, 'lines', font_sizes=label_font_sizes)
+        result = print_max_line_info(df_used_counties, 'lines', line_fonts=label_line_fonts,
+                                     usable_width_pt=usable_width_pt)
         max_line_results.append((f"'USED' COUNTIES ('{used_field}' not blank)", result, len(df_used_counties)))
         print()
 
@@ -336,7 +489,16 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
     alert_lines.append(f"BOE Sheet: {boe_xls}")
     alert_lines.append("")
 
-    alert_lines.append(MAX_CHARS_PER_LINE_TEXT)
+    if usable_width_pt:
+        alert_lines.append(
+            f"Fit check: each line's real rendered width (its actual font, size, and\n"
+            f"bold) is measured and compared to the label cell's usable width of\n"
+            f"{usable_width_pt:.1f} pt ({usable_width_pt / 72:.2f} in). A line marked TOO WIDE will\n"
+            f"wrap in Word; try the suggested smaller size or shorten the text.")
+    else:
+        alert_lines.append(
+            "Fit check: the label cell width could not be read, so line widths were\n"
+            "not measured. Character counts are shown for reference only.")
 
     alert_message = '\n'.join(alert_lines)
     # pyautobek.alert(alert_message, "MAX LABEL LINE LENGTHS")
