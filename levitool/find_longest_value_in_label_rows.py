@@ -100,6 +100,22 @@ def _para_bold(para) -> bool:
     return False
 
 
+def _para_indent_pt(para) -> float:
+    """Returns the total horizontal indent (points) that narrows a paragraph's text.
+
+    Word reduces a paragraph's usable text width by its left and right indents, and the
+    first line additionally by a positive first-line indent. A label line is a single
+    visual line, so the first-line indent (when positive) applies to it. These indents
+    are on top of the cell margins and must be subtracted from the cell width, or the
+    fit check overestimates how much text fits (which let a wrapping line slip through).
+    """
+    pf = para.paragraph_format
+    left = pf.left_indent.pt if pf.left_indent is not None else 0.0
+    right = pf.right_indent.pt if pf.right_indent is not None else 0.0
+    first = pf.first_line_indent.pt if pf.first_line_indent is not None else 0.0
+    return left + right + max(first, 0.0)
+
+
 def _para_font(para):
     """Returns the dominant font family name for a paragraph, or None if unset.
 
@@ -135,8 +151,9 @@ def get_label_line_font_info(label_docx) -> list:
         list: One dict per paragraph in the label cell, in order, with keys:
             'line' (1-based number), 'size' (point size, float), 'estimated' (True when
             the size was inferred rather than read from an explicit Latin size), 'bold'
-            (True when any visible text on the line is bold), and 'font' (dominant font
-            family name, or None when none is specified).
+            (True when any visible text on the line is bold), 'font' (dominant font
+            family name, or None when none is specified), and 'indent_pt' (horizontal
+            paragraph indent in points that narrows this line's usable width).
     """
     d = deepcopy(Document(label_docx))
     info = []
@@ -148,6 +165,7 @@ def get_label_line_font_info(label_docx) -> list:
             'estimated': estimated,
             'bold': _para_bold(para),
             'font': _para_font(para),
+            'indent_pt': _para_indent_pt(para),
         })
     return info
 
@@ -284,6 +302,12 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
                 font = info.get('font')
                 font_assumed = font is None  # no font named in the docx; default assumed
 
+                # This line's usable width = the cell's usable width minus this
+                # paragraph's own indent (indents narrow the text and vary per line).
+                line_usable = None
+                if usable_width_pt is not None:
+                    line_usable = usable_width_pt - info.get('indent_pt', 0.0)
+
                 # Resolve the real font file once; measure every candidate line's width
                 # and keep the widest by RENDERED width (not char count, since fonts are
                 # proportional). font_path is None only if no usable font was found.
@@ -306,12 +330,12 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
                 note_str = f" ({', '.join(notes)})" if notes else ""
                 font_str = f" {family_used}" if size_pt else ""
 
-                if measured is not None and usable_width_pt:
-                    over = measured > usable_width_pt
+                if measured is not None and line_usable:
+                    over = measured > line_usable
                     meta_str = (f"  - {size_num} pt{weight_str}{font_str}, "
-                                f"{measured:.0f} of {usable_width_pt:.0f} pt wide{note_str}")
+                                f"{measured:.0f} of {line_usable:.0f} pt wide{note_str}")
                     if over:
-                        suggested = max_fitting_size_pt(font_path, max_line, size_pt, usable_width_pt)
+                        suggested = max_fitting_size_pt(font_path, max_line, size_pt, line_usable)
                         if suggested and suggested >= 5:
                             fit_str = f"try {suggested:g} pt"
                         else:
