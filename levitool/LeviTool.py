@@ -627,7 +627,8 @@ def main() -> None:
         return
 
     choice = pyautobek.confirm("What do you want to do?", title='Select',
-                      buttons=['LeviTool', 'Max Row Len', 'Check Urls', 'Check Short Urls', 'Exit'])
+                      buttons=['LeviTool', 'Max Row Len', 'Check Urls', 'Check Short Urls',
+                               'Edit Config', 'Exit'])
     choice = choice.lower()
 
     if choice == 'levitool':
@@ -639,6 +640,9 @@ def main() -> None:
     elif choice == 'check short urls':
         check_short_boe_urls(key_containing_short_url=None, key_containing_url=None, key_for_used=None,
                              open_browser=None)
+    elif choice == 'edit config':
+        from .edit_config import edit_config
+        edit_config()
     else:
         exit()
 
