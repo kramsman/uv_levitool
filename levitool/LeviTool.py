@@ -332,7 +332,7 @@ def load_and_validate_excel(xlsx_file: str, required_keys: set) -> pd.DataFrame:
     return county_sheet
 
 
-def filter_and_check_data(county_sheet: pd.DataFrame) -> pd.DataFrame:
+def filter_and_check_data(county_sheet: pd.DataFrame, num_docx_per_county: int = 0) -> pd.DataFrame:
     """Filters the county sheet to used rows and checks for nan or blank values.
 
     Prompts the user to confirm the county selection and to close MS Word, unless
@@ -341,6 +341,8 @@ def filter_and_check_data(county_sheet: pd.DataFrame) -> pd.DataFrame:
 
     Args:
         county_sheet (pd.DataFrame): Full county DataFrame with all columns including {USE}.
+        num_docx_per_county (int): Number of docx template files processed per county,
+            shown in the confirmation prompt.
 
     Returns:
         pd.DataFrame: Filtered DataFrame containing only rows where {USE} is not null or empty.
@@ -355,7 +357,8 @@ def filter_and_check_data(county_sheet: pd.DataFrame) -> pd.DataFrame:
     logger.info("")
 
     if not TEST_SKIP_PROMPTS:
-        exit_yes_no(f"Will process {used_counties_df.shape[0]} of {county_sheet.shape[0]} total counties:\n\n"
+        exit_yes_no(f"Will process {used_counties_df.shape[0]} of {county_sheet.shape[0]} total counties, "
+                    f"{num_docx_per_county} docx file(s) each:\n\n"
                     f"{string_of_used_county_names}\n\nContinue?")
 
     # Check for nan values
@@ -604,7 +607,7 @@ def levitool() -> None:
     boe_input_xlsx, docx_input_files = load_template_files(path_of_input)
     required_keys = extract_required_keys(docx_input_files)
     counties_df = load_and_validate_excel(boe_input_xlsx, required_keys)
-    used_counties_df = filter_and_check_data(counties_df)
+    used_counties_df = filter_and_check_data(counties_df, len(docx_input_files))
     output_docxs_path, output_pdfs_dir = setup_output_dirs(path_root)
     count_counties_processed = generate_documents(used_counties_df, docx_input_files, output_docxs_path)
 
