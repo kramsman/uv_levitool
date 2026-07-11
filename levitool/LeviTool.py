@@ -26,6 +26,8 @@ sys.path.append(os.path.expanduser("~/Dropbox/Postcard Files/"))
 import subprocess
 import glob
 import re
+import shutil
+import tempfile
 from collections import Counter
 from copy import deepcopy
 from pathlib import Path
@@ -35,10 +37,10 @@ from uvbekutils import exit_yes, exit_yes_no, setup_loguru, select_file
 from uvbekutils import pyautobek
 from .check_boe_urls import check_boe_urls, check_short_boe_urls
 from docx import Document  # package in Conda is python-docx, not simply docx
-from docx2pdf import convert
 from loguru import logger
 from .find_longest_value_in_label_rows import max_label_lengths
-from .constants import INITIAL_ATTACHMENT_DIR, PROGRAM_REQUIRED_KEYS, TEST_INPUT_DIR, TEST_SKIP_PROMPTS
+from .constants import (INITIAL_ATTACHMENT_DIR, PROGRAM_REQUIRED_KEYS, TEST_INPUT_DIR,
+                        TEST_SKIP_PROMPTS, DOC_TO_PDF_CONVERTER)
 
 pd.options.mode.copy_on_write = True  # fix chain assignment forced in Pandas 3.0
 
@@ -444,14 +446,141 @@ def generate_documents(used_counties_df: pd.DataFrame, docx_files: list, output_
 def convert_to_pdfs(output_docxs_dir: Path, output_pdfs_dir: Path) -> None:
     """Converts all docx files in the output docx directory to PDFs.
 
+    Dispatches on the module-level ``DOC_TO_PDF_CONVERTER`` flag:
+    ``"docx2pdf"`` uses Word's Save-As-PDF exporter (fast, but drops color-font
+    glyphs); ``"wordexporter"`` drives Word's Print -> Save as PDF so COLR/CPAL
+    color symbols are preserved; ``"libreoffice"`` converts headless via
+    LibreOffice, which also preserves the color symbol with no template changes.
+
     Args:
         output_docxs_dir (Path): Directory containing the filled docx files to convert.
         output_pdfs_dir (Path): Directory where the resulting PDF files will be saved.
+
+    Raises:
+        ValueError: If ``DOC_TO_PDF_CONVERTER`` is not a recognized value.
     """
 
-    logger.debug("calling convert on all docxs in Output directory")
-    convert(output_docxs_dir, output_pdfs_dir)
+    logger.debug(f"converting docxs to pdfs via '{DOC_TO_PDF_CONVERTER}'")
+    if DOC_TO_PDF_CONVERTER == "docx2pdf":
+        from docx2pdf import convert  # lazy: only needed for this path
+        convert(output_docxs_dir, output_pdfs_dir)
+    elif DOC_TO_PDF_CONVERTER == "wordexporter":
+        _convert_via_wordexporter(output_docxs_dir, output_pdfs_dir)
+    elif DOC_TO_PDF_CONVERTER == "libreoffice":
+        _convert_via_libreoffice(output_docxs_dir, output_pdfs_dir)
+    else:
+        raise ValueError(
+            f"Unknown DOC_TO_PDF_CONVERTER {DOC_TO_PDF_CONVERTER!r}; "
+            f"expected 'docx2pdf', 'wordexporter', or 'libreoffice'.")
     logger.debug("after convert")
+
+
+def _convert_via_wordexporter(output_docxs_dir: Path, output_pdfs_dir: Path) -> None:
+    """Converts each docx to PDF through Word's Print -> "Save as PDF" path.
+
+    Runs the bundled ``word_print_to_pdf.jxa`` once per docx via ``osascript``.
+    Unlike ``docx2pdf`` (Word's exporter), this routes through macOS
+    Quartz/CoreText and therefore preserves COLR/CPAL color-font glyphs such as
+    the CFCG color symbol. Word's default print filename equals the document
+    name, so each file lands at ``<output_pdfs_dir>/<stem>.pdf``, matching the
+    ``docx2pdf`` naming contract.
+
+    Args:
+        output_docxs_dir (Path): Directory containing the filled docx files to convert.
+        output_pdfs_dir (Path): Directory where the resulting PDF files will be saved.
+
+    Raises:
+        RuntimeError: If the JXA helper reports an error or a PDF is not produced.
+    """
+
+    jxa = Path(__file__).parent / "word_print_to_pdf.jxa"
+    docx_files = sorted(output_docxs_dir.glob("*.docx"))
+    for i, docx_file in enumerate(docx_files, start=1):
+        expected_pdf = output_pdfs_dir / (docx_file.stem + ".pdf")
+        logger.debug(f"wordexporter: printing {docx_file.name} ({i}/{len(docx_files)})")
+        result = subprocess.run(
+            ["/usr/bin/osascript", "-l", "JavaScript", str(jxa),
+             str(docx_file), str(output_pdfs_dir)],
+            capture_output=True, text=True)
+        message = (result.stdout or "").strip()
+        if result.returncode != 0 or not message.startswith("OK"):
+            raise RuntimeError(
+                f"wordexporter failed for {docx_file.name}: "
+                f"{message or result.stderr.strip()}")
+        if not expected_pdf.exists():
+            raise RuntimeError(
+                f"wordexporter reported success but {expected_pdf.name} was not created")
+    logger.info(f"wordexporter converted {len(docx_files)} docx files to PDF")
+
+
+def _find_soffice() -> str:
+    """Locates the LibreOffice ``soffice`` executable across platforms.
+
+    Returns:
+        str: Path to (or name of) the ``soffice`` executable.
+
+    Raises:
+        FileNotFoundError: If LibreOffice is not installed / not found.
+    """
+
+    candidates = [
+        "/Applications/LibreOffice.app/Contents/MacOS/soffice",   # macOS
+        "soffice",                                                # Linux / on PATH
+        "libreoffice",                                            # some Linux distros
+        r"C:\Program Files\LibreOffice\program\soffice.exe",      # Windows
+    ]
+    for candidate in candidates:
+        found = shutil.which(candidate) or (candidate if Path(candidate).exists() else None)
+        if found:
+            return found
+    raise FileNotFoundError(
+        "LibreOffice 'soffice' not found. Install LibreOffice to use "
+        "DOC_TO_PDF_CONVERTER='libreoffice' (e.g. 'brew install --cask libreoffice').")
+
+
+def _convert_via_libreoffice(output_docxs_dir: Path, output_pdfs_dir: Path) -> None:
+    """Converts all docx files to PDF headlessly via LibreOffice.
+
+    Runs a single ``soffice --headless --convert-to pdf`` over the whole
+    directory. Unlike ``docx2pdf`` (Word's exporter), LibreOffice renders
+    COLR/CPAL color-font glyphs, so the CFCG color symbol survives with no
+    template changes. Note that LibreOffice lays out DOCX slightly differently
+    from Word, so label wrapping/margins should be verified once. Output names
+    match the ``docx2pdf`` contract (``<stem>.pdf`` in ``output_pdfs_dir``).
+
+    Args:
+        output_docxs_dir (Path): Directory containing the filled docx files to convert.
+        output_pdfs_dir (Path): Directory where the resulting PDF files will be saved.
+
+    Raises:
+        FileNotFoundError: If LibreOffice is not installed.
+        RuntimeError: If the conversion fails or a PDF is not produced.
+    """
+
+    soffice = _find_soffice()
+    docx_files = sorted(output_docxs_dir.glob("*.docx"))
+    if not docx_files:
+        return
+
+    # A throwaway user profile avoids LibreOffice's single-instance lock (so it
+    # works even if the user already has LibreOffice open).
+    profile_uri = Path(tempfile.mkdtemp(prefix="lo_levitool_")).as_uri()
+    logger.debug(f"libreoffice: converting {len(docx_files)} docx files via {soffice}")
+    result = subprocess.run(
+        [soffice, f"-env:UserInstallation={profile_uri}", "--headless",
+         "--convert-to", "pdf", "--outdir", str(output_pdfs_dir),
+         *[str(f) for f in docx_files]],
+        capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"LibreOffice conversion failed:\n{result.stderr.strip()}")
+
+    for docx_file in docx_files:
+        expected_pdf = output_pdfs_dir / (docx_file.stem + ".pdf")
+        if not expected_pdf.exists():
+            raise RuntimeError(
+                f"LibreOffice did not produce {expected_pdf.name}\n"
+                f"stdout: {result.stdout.strip()}\nstderr: {result.stderr.strip()}")
+    logger.info(f"libreoffice converted {len(docx_files)} docx files to PDF")
 
 
 def levitool() -> None:

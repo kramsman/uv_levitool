@@ -1,0 +1,112 @@
+#!/usr/bin/osascript -l JavaScript
+
+/*
+Convert ONE .docx to PDF using Word for Mac's PRINT path (File > Print > PDF > Save as PDF),
+which routes through macOS Quartz/CoreText and therefore preserves COLR/CPAL *color* fonts
+(e.g. the CFCG color symbol). This differs from docx2pdf, which uses Word's Save-As-PDF
+exporter and drops color-font glyphs.
+
+Usage:  osascript -l JavaScript word_print_to_pdf.jxa <inputDocxPath> <outputDir>
+Saves:  <outputDir>/<docxStem>.pdf   (Word's default print filename == the document name)
+Prints: "OK" on success, or "ERROR: ..." to stdout.
+
+Requires the controlling process to have Automation + Accessibility permission
+(System Settings > Privacy & Security). Suppresses/handles Word's "margins are pretty small" alert.
+
+IMPORTANT: all accessibility searches are DEPTH-CAPPED and SCOPED to the relevant dialog window.
+An un-scoped search of Word's full window tree can take ~60s, which breaks timing.
+*/
+
+function run(argv) {
+  const se = Application("System Events");
+  const word = Application("Microsoft Word");
+  const inPath = argv[0];
+  const outDir = argv[1];
+
+  // Depth-capped breadth-first search within a scoped root (fast).
+  function findIn(root, pred, maxDepth) {
+    let stack = [[root, 0]];
+    while (stack.length) {
+      const [el, d] = stack.shift();
+      try { if (pred(el)) return el; } catch (e) {}
+      if (d >= maxDepth) continue;
+      let kids = [];
+      try { kids = el.uiElements(); } catch (e) { continue; }
+      for (let i = 0; i < kids.length; i++) stack.push([kids[i], d + 1]);
+    }
+    return null;
+  }
+  const btnTitled = t => (el => { try { return el.role() === "AXButton" && el.title() === t; } catch (e) { return false; } });
+
+  // Shallow scan of the process's top-level windows for a button (handles small alert dialogs fast).
+  const wp = se.processes["Microsoft Word"];
+  function clickTopLevelButton(titles) {
+    let wins;
+    try { wins = wp.windows(); } catch (e) { return false; }
+    for (let w of wins) {
+      // alerts expose their buttons within a couple levels; cap depth at 4
+      const b = findIn(w, el => { try { return el.role() === "AXButton" && titles.indexOf(el.title()) >= 0; } catch (e) { return false; } }, 4);
+      if (b) { try { b.click(); return true; } catch (e) {} }
+    }
+    return false;
+  }
+  function printWindow() {
+    try { for (let w of wp.windows()) { if (w.name() === "Print") return w; } } catch (e) {}
+    return null;
+  }
+
+  word.activate();
+  delay(0.4);
+  // Best-effort: silence Word alerts (the small-margins warning may ignore this, so we also handle it below).
+  try { word.displayAlerts = false; } catch (e) {}
+  try { word.open(Path(inPath)); } catch (e) { return "ERROR: open failed: " + e.toString(); }
+  delay(1.2);
+
+  se.keystroke("p", { using: ["command down"] });
+
+  // Wait for the Print dialog; dismiss the small-margins alert ("Yes") if it appears.
+  let printWin = null;
+  for (let i = 0; i < 24 && !printWin; i++) {
+    delay(0.4);
+    clickTopLevelButton(["Yes"]);   // small-margins warning -> proceed
+    printWin = printWindow();
+  }
+  if (!printWin) return "ERROR: Print dialog never appeared";
+
+  // Open the "PDF" menu button and choose "Save as PDF..." (scoped to the print dialog = fast).
+  const pdfBtn = findIn(printWin, el => { try { return el.role() === "AXMenuButton" && el.description() === "PDF"; } catch (e) { return false; } }, 6);
+  if (!pdfBtn) return "ERROR: PDF menu button not found";
+  pdfBtn.click();
+  delay(1.0);
+  const saveItem = findIn(pdfBtn, el => { try { return el.role() === "AXMenuItem" && (el.title() || "").indexOf("Save as PDF") >= 0; } catch (e) { return false; } }, 4);
+  if (!saveItem) return "ERROR: 'Save as PDF' menu item not found";
+  saveItem.click();
+  delay(1.2);
+
+  // Save sheet (attaches to the Print window). Set destination folder via "Go to Folder",
+  // keep the default filename (== document name -> <stem>.pdf), then click Save.
+  se.keystroke("g", { using: ["command down", "shift down"] });
+  delay(0.8);
+  se.keystroke(outDir);
+  delay(0.7);
+  se.keyCode(36);   // Return: accept "Go to Folder"
+  delay(1.0);
+
+  // Click the Save button explicitly (scoped to the print window subtree, which now holds the sheet).
+  let saveBtn = null;
+  for (let i = 0; i < 8 && !saveBtn; i++) {
+    saveBtn = findIn(printWin, btnTitled("Save"), 8);
+    if (!saveBtn) delay(0.4);
+  }
+  if (!saveBtn) return "ERROR: Save button not found";
+  saveBtn.click();
+  delay(1.0);
+
+  // Overwrite confirmation, if the PDF already exists.
+  for (let i = 0; i < 4; i++) { if (clickTopLevelButton(["Replace"])) break; delay(0.3); }
+
+  delay(1.0);
+  try { word.activeDocument.close({ saving: "no" }); } catch (e) {}
+  try { word.displayAlerts = true; } catch (e) {}
+  return "OK";
+}

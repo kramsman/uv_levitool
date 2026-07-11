@@ -11,6 +11,18 @@ PROGRAM_REQUIRED_KEYS = {'{STATE}', '{CNTYFILENAME}', '{USE}'}
 TEST_INPUT_DIR = False       # skip file picker, use hardcoded input path
 TEST_SKIP_PROMPTS = False    # skip exit_yes_no confirmation dialogs
 
+# Which method converts the merged .docx files to PDF:
+#   "docx2pdf"     - current/default behavior. Uses Word's Save-As-PDF exporter. Fast, but it
+#                    DROPS COLR/CPAL color-font glyphs (e.g. the CFCG color symbol vanishes in the PDF).
+#   "wordexporter" - drives Word's Print -> "Save as PDF" (macOS Quartz/CoreText) via
+#                    word_print_to_pdf.jxa. Preserves the color symbol. Slower, drives the Word UI,
+#                    and needs one-time Automation + Accessibility permission for the running terminal.
+#   "libreoffice"  - converts headless via LibreOffice ('soffice --convert-to pdf'). Renders the
+#                    color symbol and needs no template changes, but LibreOffice lays out DOCX
+#                    slightly differently from Word, so verify label wrapping/margins once.
+#                    Requires LibreOffice installed (e.g. 'brew install --cask libreoffice').
+DOC_TO_PDF_CONVERTER = "libreoffice"
+
 # Assumed font size (pt) when a label line specifies no readable Latin size (w:sz).
 # Matches Word's built-in fallback when nothing in the file specifies a size.
 # NOTE: the old CHARS_PER_LINE_30PP / MAX_CHARS_PER_LINE_TEXT character-count tables
