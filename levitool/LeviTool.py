@@ -44,7 +44,9 @@ from .constants import (INITIAL_ATTACHMENT_DIR, PROGRAM_REQUIRED_KEYS, TEST_INPU
 
 pd.options.mode.copy_on_write = True  # fix chain assignment forced in Pandas 3.0
 
-setup_loguru("INFO", "DEBUG", )
+# NOTE: setup_loguru is called once inside main(), not at module load. Running it at import
+# adds a second log sink (hence duplicate log lines) when this module is executed twice —
+# e.g. `python -m levitool.LeviTool` imports it as both 'levitool.LeviTool' and '__main__'.
 
 
 def count_brackets(s: str) -> int:
@@ -566,6 +568,7 @@ def _convert_via_libreoffice(output_docxs_dir: Path, output_pdfs_dir: Path) -> N
     # works even if the user already has LibreOffice open).
     profile_uri = Path(tempfile.mkdtemp(prefix="lo_levitool_")).as_uri()
     logger.debug(f"libreoffice: converting {len(docx_files)} docx files via {soffice}")
+    logger.info(f"Ready to convert {len(docx_files)} docx files to pdfs (status will not be shown until finished)")
     result = subprocess.run(
         [soffice, f"-env:UserInstallation={profile_uri}", "--headless",
          "--convert-to", "pdf", "--outdir", str(output_pdfs_dir),
@@ -621,6 +624,7 @@ def main() -> None:
     URL check, or short URL check.
     """
     import sys
+    setup_loguru("INFO", "DEBUG")   # configure logging once, here (see note near imports)
     if "--update" in sys.argv:
         subprocess.run(["uvx", "--reinstall", "--from",
             "git+https://github.com/kramsman/uv_levitool.git", "levitool"])
