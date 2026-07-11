@@ -350,7 +350,7 @@ def filter_and_check_data(county_sheet: pd.DataFrame) -> pd.DataFrame:
     used_counties_df.replace([""], ["' '"], inplace=True)
 
     list_of_used_county_names = used_counties_df['{CNTYFILENAME}'].to_list()
-    string_of_used_county_names = ",".join(list_of_used_county_names)
+    string_of_used_county_names = ", ".join(list_of_used_county_names)
     logger.info(f"Running on counties: {string_of_used_county_names}")
     logger.info("")
 
