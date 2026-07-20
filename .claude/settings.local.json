@@ -29,7 +29,8 @@
       "Bash(.venv/bin/python *)",
       "Bash(grep -v \"^$\")",
       "Bash(grep -iE '\\\\.xlsx$')",
-      "Bash(echo \"--- exit status: $? ---\")"
+      "Bash(echo \"--- exit status: $? ---\")",
+      "Bash(.venv/bin/pip show *)"
     ]
   }
 }

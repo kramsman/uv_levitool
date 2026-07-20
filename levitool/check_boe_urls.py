@@ -10,6 +10,25 @@ import webbrowser
 ATTACHMENTS_INITIAL_DIR = Path("~/Dropbox/Postcard Files/Attachments/Campaigns").expanduser()
 
 
+def has_value(series):
+    """Boolean mask of rows whose value is a real (non-blank) entry.
+
+    read_boe_xls reads every cell as a string, so blank cells arrive as NaN, an
+    empty string, or the literal 'nan'. A plain .notnull() check treats empty
+    strings and 'nan' as populated, which lets unmarked counties slip through the
+    'used' filter. This treats all of those as blank.
+
+    Args:
+        series: A pandas Series of string (or NaN) cell values.
+
+    Returns:
+        pandas.Series: Boolean mask, True where the cell holds a real value.
+    """
+
+    stripped = series.fillna('').astype(str).str.strip().str.lower()
+    return ~stripped.isin(['', 'nan', 'none'])
+
+
 def final_url(url: str):
     """Follows all redirects for a URL and returns the final destination URL.
 
@@ -181,10 +200,10 @@ def check_boe_urls(key_containing_url: str = None, key_for_used: str = None,
 
     # if a field is specified to identify used rows (those we are interested in) then filter the df
     if key_for_used:
-        county_sheet_df = county_sheet_df.loc[county_sheet_df[key_for_used].notnull()]
+        county_sheet_df = county_sheet_df.loc[has_value(county_sheet_df[key_for_used])]
 
     # now filter to take only rows where our url field is not blank
-    county_sheet_df = county_sheet_df.loc[county_sheet_df[key_containing_url].notnull()]
+    county_sheet_df = county_sheet_df.loc[has_value(county_sheet_df[key_containing_url])]
 
     # get df of rows with unique county and url (take only the first url/county combination if multiple. Should be ok
     # cause multiple urls should be the generic)
@@ -304,18 +323,18 @@ def check_short_boe_urls(key_containing_short_url: str = None, key_containing_ur
                                             allow_none=True,
                                              )[0]
     # make sure key is on file
-    if key_for_used is not None and key_for_used is not '':  # None ok from select = all so have to check
+    if key_for_used is not None and key_for_used != '':  # None ok from select = all so have to check
         key_for_used = key_for_used.lower()
         if key_for_used not in county_sheet_keys:
             exit_yes(f"Key 'for used' '{key_for_used}' not in county keys: \n\n{', '.join(county_sheet_keys)}")
     logger.info(f"Key field being used to limit counties is '{key_for_used}'")
 
     # if a field is specified to identify used rows (those we are interested in) then filter the df
-    if key_for_used is not None and key_for_used is not '':
-        county_sheet_df = county_sheet_df.loc[county_sheet_df[key_for_used].notnull()]
+    if key_for_used is not None and key_for_used != '':
+        county_sheet_df = county_sheet_df.loc[has_value(county_sheet_df[key_for_used])]
 
     # only rows where our url field is not blank
-    county_sheet_df = county_sheet_df.loc[county_sheet_df[key_containing_short_url].notnull()]
+    county_sheet_df = county_sheet_df.loc[has_value(county_sheet_df[key_containing_short_url])]
 
     # get df of rows with unique county and url (take only the first url/county combination if multiple. Should be ok
     # cause multiple urls should be the generic)
