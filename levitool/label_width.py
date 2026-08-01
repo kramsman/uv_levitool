@@ -25,6 +25,8 @@ from functools import lru_cache
 
 from PIL import ImageFont
 
+from .constants import MAX_SUGGESTED_SIZE_PT
+
 # We load the font once at a large reference size and scale linearly (width is exactly
 # proportional to point size). Measuring at a large size avoids integer-pixel rounding
 # error that shows up when measuring directly at small sizes like 9 or 11 pt.
@@ -166,7 +168,7 @@ def segments_width_pt(segments) -> float:
     return total
 
 
-def _dominant_text_size(text_segments):
+def dominant_text_size(text_segments):
     """Point size of the text segment covering the most characters, or None."""
     by_size = {}
     for seg in text_segments:
@@ -180,6 +182,12 @@ def _dominant_text_size(text_segments):
 
 def max_fitting_size_pt(segments, usable_pt: float) -> float:
     """Largest point size (in 0.5 pt steps) for a line's text so the line fits.
+
+    Answers the question in both directions: it is what to shrink an overflowing line to,
+    and equally what a line with room to spare could be grown to. The result is capped at
+    MAX_SUGGESTED_SIZE_PT - label text is never set larger than that, and without the cap a
+    short line measures as fitting at a size that would push the label past its fixed row
+    height, where Word clips the text rather than growing the row.
 
     Symbol segments (the CFCG logo and the like) are held at their current size and only
     the text segments are resized, which is what happens in practice: the sentence gets
@@ -198,8 +206,9 @@ def max_fitting_size_pt(segments, usable_pt: float) -> float:
         usable_pt (float): The line's usable width in points.
 
     Returns:
-        float: Suggested point size, or None when no text can be resized (no text
-            segments, unmeasurable widths, or the symbols alone already overflow).
+        float: Suggested point size, never above MAX_SUGGESTED_SIZE_PT, or None when no
+            text can be resized (no text segments, unmeasurable widths, or the symbols
+            alone already overflow).
     """
     text_segments = [s for s in segments if not s.get('is_symbol') and (s.get('text') or '')]
     symbol_segments = [s for s in segments if s.get('is_symbol')]
@@ -209,7 +218,7 @@ def max_fitting_size_pt(segments, usable_pt: float) -> float:
     if not text_w or symbol_w is None:
         return None
 
-    dominant_size = _dominant_text_size(text_segments)
+    dominant_size = dominant_text_size(text_segments)
     if not dominant_size:
         return None
 
@@ -218,7 +227,7 @@ def max_fitting_size_pt(segments, usable_pt: float) -> float:
     if factor <= 0:
         return None
 
-    suggested = math.floor(factor * dominant_size * 2) / 2
+    suggested = min(math.floor(factor * dominant_size * 2) / 2, MAX_SUGGESTED_SIZE_PT)
     while suggested >= 5:
         scaled = [dict(s, size=s['size'] * suggested / dominant_size) for s in text_segments]
         width = segments_width_pt(scaled)

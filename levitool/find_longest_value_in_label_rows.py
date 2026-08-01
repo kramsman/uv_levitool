@@ -16,9 +16,10 @@ from uvbekutils import list_pick
 from uvbekutils import standardize_columns
 
 from .read_boe_xls import read_boe_xls
-from .constants import DEFAULT_FONT_SIZE_PT
+from .constants import DEFAULT_FONT_SIZE_PT, MAX_SUGGESTED_SIZE_PT
 from .label_width import (resolve_font, max_fitting_size_pt, segments_width_pt,
-                          DEFAULT_FAMILY, FIT_TOLERANCE, SUGGEST_TOLERANCE)
+                          dominant_text_size, DEFAULT_FAMILY, FIT_TOLERANCE,
+                          SUGGEST_TOLERANCE)
 
 # {KEY} replacement tokens, e.g. '{county}'.
 _KEY_RE = re.compile(r'\{[a-zA-Z0-9]+\}')
@@ -608,7 +609,17 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
                             fit_str = "shorten text - won't fit"
                         warning = f"   - **** TOO WIDE - {fit_str} ****"
                     else:
+                        # The line fits, but it may have room to spare. The same call that
+                        # sizes an overflowing line down also sizes a roomy one up.
                         warning = "   - fits"
+                        biggest = max_fitting_size_pt(max_segments, line_usable)
+                        current = dominant_text_size(
+                            [s for s in max_segments if not s['is_symbol']])
+                        # Only ever report growing. A line between the suggestion budget
+                        # and the fit threshold computes a 'biggest' below its current
+                        # size, which would contradict the 'fits' verdict beside it.
+                        if biggest and current and biggest > current:
+                            warning = f"   - fits (could go to {biggest:g} pt)"
                 else:
                     # No font metrics available (font size unknown or no font found):
                     # report the longest line by character count without a verdict.
@@ -796,7 +807,12 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
             f"A line is called TOO WIDE past {FIT_TOLERANCE:.0%} of that width, because Word and this\n"
             f"measurement do not agree to the last fraction of a point. Suggested sizes are\n"
             f"sized to {SUGGEST_TOLERANCE:.0%} so they land with a little room to spare; shorten the text\n"
-            f"instead if the suggestion is too small to read.")
+            f"instead if the suggestion is too small to read.\n"
+            f"\n"
+            f"'could go to N pt' means the line has width to spare and could be set larger.\n"
+            f"Nothing is ever suggested above {MAX_SUGGESTED_SIZE_PT:g} pt. Only line width is measured, not\n"
+            f"height: that ceiling is what keeps a label of up to five lines inside its one\n"
+            f"inch row, so check the label by eye if it ever grows past five lines.")
     else:
         alert_lines.append(
             "Fit check: the label cell width could not be read, so line widths were\n"

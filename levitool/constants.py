@@ -28,3 +28,8 @@ DOC_TO_PDF_CONVERTER = "libreoffice"
 # NOTE: the old CHARS_PER_LINE_30PP / MAX_CHARS_PER_LINE_TEXT character-count tables
 # were removed; line fit is now measured from the real font width (see label_width.py).
 DEFAULT_FONT_SIZE_PT = 10
+
+# Largest point size the fit check will ever suggest. Label text is never set above this,
+# and the ceiling also keeps a suggestion from pushing a 5-line label past the 1 inch row
+# height - the row height rule is "exact", so Word clips overflow instead of growing the row.
+MAX_SUGGESTED_SIZE_PT = 12
