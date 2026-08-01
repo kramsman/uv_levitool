@@ -4,6 +4,7 @@ Should be max of 34.
 
 # FIXME check if {priority} changes the number of rows used in count
 
+import re
 from copy import deepcopy
 from pathlib import Path
 
@@ -16,7 +17,15 @@ from uvbekutils import standardize_columns
 
 from .read_boe_xls import read_boe_xls
 from .constants import DEFAULT_FONT_SIZE_PT
-from .label_width import resolve_font, width_pt, max_fitting_size_pt, DEFAULT_FAMILY
+from .label_width import (resolve_font, max_fitting_size_pt, segments_width_pt,
+                          DEFAULT_FAMILY, FIT_TOLERANCE, SUGGEST_TOLERANCE)
+
+# {KEY} replacement tokens, e.g. '{county}'.
+_KEY_RE = re.compile(r'\{[a-zA-Z0-9]+\}')
+
+# Unicode Private Use Area. Symbol fonts (the CFCG logo among them) map their glyphs here,
+# so a character in this range is a picture, not text that should be resized.
+_PUA_START, _PUA_END = 0xE000, 0xF8FF
 
 
 def get_label_text(label_docx) -> str:
@@ -40,64 +49,317 @@ def get_label_text(label_docx) -> str:
     return label_text
 
 
-def _para_size(para):
-    """Returns (size_pt, estimated) for a paragraph.
+def _theme_families(document) -> dict:
+    """Returns the theme's major/minor Latin font names, e.g. {'minor': 'Aptos'}.
 
-    Reads the Latin font size (w:sz) from the run, then the paragraph style, then the
-    paragraph mark. When no Latin size is set, falls back to the complex-script size
-    (w:szCs) and finally to DEFAULT_FONT_SIZE_PT; estimated is True in that case
-    because the value was inferred, not read from an explicit Latin size.
+    A run can name its font only by theme reference (w:rFonts/@w:asciiTheme='minorHAnsi'),
+    in which case the real family lives in theme1.xml. Returns an empty dict when the
+    theme part is missing or unreadable.
+    """
+    from lxml import etree
+
+    a = '{http://schemas.openxmlformats.org/drawingml/2006/main}'
+    families = {}
+    try:
+        for part in document.part.package.iter_parts():
+            if not str(part.partname).endswith('theme1.xml'):
+                continue
+            root = etree.fromstring(part.blob)
+            for key, scheme in (('major', 'majorFont'), ('minor', 'minorFont')):
+                latin = root.find(f'.//{a}fontScheme/{a}{scheme}/{a}latin')
+                if latin is not None and latin.get('typeface'):
+                    families[key] = latin.get('typeface')
+            break
+    except Exception:  # a malformed or absent theme must not break the fit check
+        return {}
+    return families
+
+
+def _rfonts_family(rfonts, themes: dict):
+    """Returns the Latin family named by a w:rFonts element, or None.
+
+    Prefers the explicit w:ascii name and falls back to resolving a w:asciiTheme
+    reference through the document theme.
     """
     from docx.oxml.ns import qn
 
-    size_pt = None
-    # 1. Explicit Latin size on a run.
-    for run in para.runs:
-        if run.font.size is not None:
-            size_pt = run.font.size.pt
-            break
-    # 2. The paragraph's named style.
-    if size_pt is None and para.style is not None and para.style.font.size is not None:
-        size_pt = para.style.font.size.pt
-    # 3. Latin size on the paragraph mark (w:pPr/w:rPr/w:sz, in half-points).
-    if size_pt is None:
-        sz = para._p.find(qn('w:pPr') + '/' + qn('w:rPr') + '/' + qn('w:sz'))
-        if sz is not None and sz.get(qn('w:val')) is not None:
-            size_pt = int(sz.get(qn('w:val'))) / 2
+    if rfonts is None:
+        return None
+    name = rfonts.get(qn('w:ascii'))
+    if name:
+        return name
+    theme_ref = rfonts.get(qn('w:asciiTheme'))
+    if theme_ref:
+        return themes.get('major' if 'major' in theme_ref.lower() else 'minor')
+    return None
 
+
+def _doc_defaults(document) -> dict:
+    """Returns the run formatting Word applies when a run specifies none of its own.
+
+    Reads the w:docDefaults block in styles.xml, then lets the Normal style override it.
+    Only when the file says nothing at all do we fall back to DEFAULT_FONT_SIZE_PT and
+    DEFAULT_FAMILY. Reading the real defaults matters: a template whose default is Word's
+    modern 11 pt would otherwise have every unsized run (the CFCG logo run among them)
+    measured at 10 pt, under-reporting the line and calling it a fit when it wraps.
+
+    Args:
+        document: An open docx Document.
+
+    Returns:
+        dict: Keys 'size' (points), 'family', 'size_from_file' and 'family_from_file'
+            (False when the value is our fallback rather than the document's), and
+            'themes' (from _theme_families(), for resolving run-level theme references).
+    """
+    from docx.oxml.ns import qn
+
+    themes = _theme_families(document)
+    size_pt = None
+    family = None
+
+    rpr = document.styles.element.find(
+        qn('w:docDefaults') + '/' + qn('w:rPrDefault') + '/' + qn('w:rPr'))
+    if rpr is not None:
+        sz = rpr.find(qn('w:sz'))
+        if sz is not None and sz.get(qn('w:val')) is not None:
+            size_pt = int(sz.get(qn('w:val'))) / 2  # half-points -> points
+        family = _rfonts_family(rpr.find(qn('w:rFonts')), themes)
+
+    try:
+        normal = document.styles['Normal']
+    except KeyError:
+        normal = None
+    if normal is not None:
+        if normal.font.size is not None:
+            size_pt = normal.font.size.pt
+        normal_family = _rfonts_family(
+            normal.element.find(qn('w:rPr') + '/' + qn('w:rFonts')), themes)
+        if normal_family:
+            family = normal_family
+
+    return {
+        'size': size_pt if size_pt else DEFAULT_FONT_SIZE_PT,
+        'family': family or DEFAULT_FAMILY,
+        'size_from_file': size_pt is not None,
+        'family_from_file': family is not None,
+        'themes': themes,
+    }
+
+
+def _run_format(run, para, defaults: dict) -> dict:
+    """Returns the family, size, and weight actually in force for one run.
+
+    Each attribute is resolved through Word's inheritance chain - the run itself, then its
+    character style, then the paragraph style, then the document defaults. Formatting is
+    read per run rather than per line because a single label line mixes them: the CFCG
+    logo run is a different family and size from the sentence beside it.
+
+    Args:
+        run: A docx Run.
+        para: The paragraph containing it (for the paragraph style).
+        defaults (dict): From _doc_defaults().
+
+    Returns:
+        dict: Keys 'family', 'size', 'bold', 'estimated' (size fell through to our
+            constant) and 'family_assumed' (family fell through to our constant).
+    """
+    from docx.oxml.ns import qn
+
+    rpr = run._r.find(qn('w:rPr'))
+    char_style = run.style          # the run's character style, or the default one
+    para_style = para.style
+
+    size_pt = run.font.size.pt if run.font.size is not None else None
+    if size_pt is None and char_style is not None and char_style.font.size is not None:
+        size_pt = char_style.font.size.pt
+    if size_pt is None and para_style is not None and para_style.font.size is not None:
+        size_pt = para_style.font.size.pt
     estimated = False
     if size_pt is None:
-        # No Latin size anywhere: fall back to the complex-script size (w:szCs),
-        # then to the default. These are estimates, not the real Latin size.
-        estimated = True
-        szcs = next(iter(para._p.iter(qn('w:szCs'))), None)
-        if szcs is not None and szcs.get(qn('w:val')) is not None:
-            size_pt = int(szcs.get(qn('w:val'))) / 2  # half-points -> points
-        else:
-            size_pt = DEFAULT_FONT_SIZE_PT
+        size_pt = defaults['size']
+        estimated = not defaults['size_from_file']
 
-    return size_pt, estimated
+    # Read w:rFonts directly rather than run.font.name so a theme reference resolves too.
+    family = _rfonts_family(rpr.find(qn('w:rFonts')) if rpr is not None else None,
+                            defaults['themes'])
+    if family is None and char_style is not None:
+        family = char_style.font.name
+    if family is None and para_style is not None:
+        family = para_style.font.name
+    family_assumed = False
+    if family is None:
+        family = defaults['family']
+        family_assumed = not defaults['family_from_file']
+
+    bold = run.font.bold
+    if bold is None and char_style is not None:
+        bold = char_style.font.bold
+    if bold is None and para_style is not None:
+        bold = para_style.font.bold
+
+    return {'family': family, 'size': size_pt, 'bold': bool(bold),
+            'estimated': estimated, 'family_assumed': family_assumed}
 
 
-def _para_bold(para) -> bool:
-    """True when any text-bearing run in the paragraph is bold.
+def _has_pua(text: str) -> bool:
+    """True when text contains a Private Use Area character (a symbol-font glyph)."""
+    return any(_PUA_START <= ord(c) <= _PUA_END for c in text)
 
-    Word splits a line (and even a single {token}) across several runs with mixed
-    formatting, so rather than measure each run separately we treat the whole line as
-    bold if any of its visible text is bold. Bold text is wider, so this errs toward
-    warning about overflow (the safe direction) and matches the simplification that a
-    partly-bold line is measured as fully bold.
+
+def _mark_symbol_segments(segments) -> None:
+    """Flags glyph segments as symbols, in place.
+
+    Segments already flagged - from a <w:sym> element or containing a Private Use Area
+    character - are left alone. This catches the remaining case: a glyph typed as an
+    ordinary character in a symbol font. The test is deliberately narrow (at most two
+    visible characters, in a family other than the line's main one) so a legitimately
+    differently-fonted *word* is still treated as text that can be resized.
     """
-    style_bold = bool(para.style and para.style.font.bold)
-    for run in para.runs:
-        if not run.text.strip():
+    counts = {}
+    for seg in segments:
+        if seg['is_symbol']:
             continue
-        b = run.font.bold
-        if b is None:
-            b = style_bold
-        if b:
-            return True
-    return False
+        counts[seg['family']] = counts.get(seg['family'], 0) + len(seg['text'])
+    if not counts:
+        return
+    dominant = max(counts, key=counts.get)
+    for seg in segments:
+        if not seg['is_symbol'] and seg['family'] != dominant and len(seg['text'].strip()) <= 2:
+            seg['is_symbol'] = True
+
+
+def _para_segments(para, defaults: dict) -> list:
+    """Splits a paragraph into formatting segments in document order.
+
+    Walks the paragraph's inner content so runs nested in a <w:hyperlink> are included -
+    python-docx omits those from paragraph.runs while still reporting their text, which
+    left a hyperlinked URL measured with formatting invented from its neighbours. Within a
+    run, <w:sym> elements are turned into their character: Word's Insert > Symbol writes no
+    w:t at all, so those glyphs previously contributed zero width.
+
+    Args:
+        para: A docx Paragraph.
+        defaults (dict): From _doc_defaults().
+
+    Returns:
+        list: Segment dicts with 'text', 'family', 'size', 'bold', 'is_symbol', and the
+            'estimated'/'family_assumed' flags from _run_format().
+    """
+    from docx.oxml.ns import qn
+    from docx.text.hyperlink import Hyperlink
+
+    segments = []
+    for item in para.iter_inner_content():
+        runs = item.runs if isinstance(item, Hyperlink) else [item]
+        for run in runs:
+            fmt = _run_format(run, para, defaults)
+            for child in run._r:
+                sym_family = None
+                if child.tag == qn('w:t'):
+                    text = child.text or ''
+                elif child.tag == qn('w:tab'):
+                    text = '\t'
+                elif child.tag == qn('w:sym'):
+                    char = child.get(qn('w:char'))
+                    if not char:
+                        continue
+                    text = chr(int(char, 16))
+                    sym_family = child.get(qn('w:font'))
+                else:
+                    continue  # w:br, w:drawing, proofing marks: no text advance to add
+                if not text:
+                    continue
+                seg = dict(fmt)
+                seg['text'] = text
+                seg['is_symbol'] = sym_family is not None or _has_pua(text)
+                if sym_family:
+                    seg['family'] = sym_family
+                segments.append(seg)
+
+    _mark_symbol_segments(segments)
+    return segments
+
+
+def segments_text(segments) -> str:
+    """Returns the plain text of a line's segments."""
+    return ''.join(seg['text'] for seg in segments)
+
+
+def _strip_trailing(segments) -> list:
+    """Copy of segments with trailing whitespace dropped.
+
+    Word ignores trailing spaces when deciding where to wrap, so they must not count
+    toward the measured width. Leading spaces are kept - those Word does render.
+    """
+    out = [dict(seg) for seg in segments]
+    while out:
+        stripped = out[-1]['text'].rstrip()
+        if stripped:
+            out[-1]['text'] = stripped
+            break
+        out.pop()
+    return out
+
+
+def substitute_segments(segments, values: dict) -> list:
+    """Replaces {KEY} tokens in a line's segments, keeping each piece's formatting.
+
+    Word splits a single token across runs - one label line is stored as 'For {' /
+    'cntytoprint' / '} info:' - so substitution cannot be done run by run. The segments are
+    joined into one string alongside a record of which segment each character came from;
+    tokens are matched against that joined text and each replacement value inherits the
+    formatting of the token's first character.
+
+    Args:
+        segments (list): Template segments for one label line, from _para_segments().
+        values (dict): Lowercased '{key}' -> replacement string.
+
+    Returns:
+        list: New segment dicts for the substituted line.
+    """
+    text = segments_text(segments)
+    owner = []  # segment index of each character in text
+    for i, seg in enumerate(segments):
+        owner.extend([i] * len(seg['text']))
+
+    pieces = []  # (segment index, text)
+
+    def add_span(start, end):
+        """Copies text[start:end] through, split at each segment boundary it crosses."""
+        i = start
+        while i < end:
+            j = i
+            while j < end and owner[j] == owner[i]:
+                j += 1
+            pieces.append((owner[i], text[i:j]))
+            i = j
+
+    last = 0
+    for match in _KEY_RE.finditer(text):
+        start, end = match.span()
+        add_span(last, start)
+        key = match.group(0).lower()
+        if key in values:
+            pieces.append((owner[start], safe_str(values[key])))
+        else:
+            add_span(start, end)  # no column for this token; leave it visible
+        last = end
+    add_span(last, len(text))
+
+    out = []
+    for seg_index, piece_text in pieces:
+        if not piece_text:
+            continue
+        if out and out[-1]['_from'] == seg_index:
+            out[-1]['text'] += piece_text
+            continue
+        seg = dict(segments[seg_index])
+        seg['text'] = piece_text
+        seg['_from'] = seg_index
+        out.append(seg)
+    for seg in out:
+        del seg['_from']
+    return out
 
 
 def _para_indent_pt(para) -> float:
@@ -116,58 +378,69 @@ def _para_indent_pt(para) -> float:
     return left + right + max(first, 0.0)
 
 
-def _para_font(para):
-    """Returns the dominant font family name for a paragraph, or None if unset.
+def get_label_line_segments(label_docx) -> list:
+    """Returns the label cell's lines, each split into formatting segments.
 
-    Weights each run's font by its text length and returns the family covering the
-    most characters, so a short differently-fonted run does not swing the result.
-    Returns None when no run and no style names a font (the caller then assumes the
-    default family).
-    """
-    counts = {}
-    for run in para.runs:
-        n = len(run.text)
-        if n == 0:
-            continue
-        name = run.font.name
-        if name is None and para.style is not None:
-            name = para.style.font.name
-        if name:
-            counts[name] = counts.get(name, 0) + n
-    if counts:
-        return max(counts, key=counts.get)
-    if para.style is not None and para.style.font.name:
-        return para.style.font.name
-    return None
-
-
-def get_label_line_font_info(label_docx) -> list:
-    """Returns per-line font info for the label cell used to measure real line width.
+    Paragraphs that are blank in the template are dropped here, and each line's formatting
+    travels with its text from this point on. Previously the font info was indexed by
+    unfiltered paragraph number while blank lines were dropped from the text list, so a
+    single blank paragraph in the label cell silently shifted every later line's font and
+    size onto the wrong line. A line that empties only after substitution is kept - it
+    simply measures as nothing - which also keeps every county row the same length.
 
     Args:
         label_docx: Path or string path to the label docx template file.
 
     Returns:
-        list: One dict per paragraph in the label cell, in order, with keys:
-            'line' (1-based number), 'size' (point size, float), 'estimated' (True when
-            the size was inferred rather than read from an explicit Latin size), 'bold'
-            (True when any visible text on the line is bold), 'font' (dominant font
-            family name, or None when none is specified), and 'indent_pt' (horizontal
-            paragraph indent in points that narrows this line's usable width).
+        list: One dict per non-blank line, in order, with keys 'line' (1-based number),
+            'indent_pt' (horizontal paragraph indent in points, which narrows this line's
+            usable width), and 'segments' (see _para_segments()).
     """
     d = deepcopy(Document(label_docx))
-    info = []
-    for i, para in enumerate(d.tables[0].rows[0].cells[0].paragraphs):
-        size_pt, estimated = _para_size(para)
-        info.append({
-            'line': i + 1,
-            'size': size_pt,
-            'estimated': estimated,
-            'bold': _para_bold(para),
-            'font': _para_font(para),
+    defaults = _doc_defaults(d)
+    lines = []
+    for para in d.tables[0].rows[0].cells[0].paragraphs:
+        segments = _para_segments(para, defaults)
+        if not segments_text(segments).strip():
+            continue
+        lines.append({
+            'line': len(lines) + 1,
             'indent_pt': _para_indent_pt(para),
+            'segments': segments,
         })
-    return info
+    return lines
+
+
+def _format_description(segments) -> str:
+    """Human-readable summary of the sizes, weights, and families used on a line.
+
+    Returns something like '9.5 pt bold Arial + 10 pt CFCG Symbol' so a mixed-format line
+    is visible in the report rather than hidden behind one made-up size.
+    """
+    seen = []
+    for seg in segments:
+        if not seg['text'].strip() or not seg['size']:
+            continue
+        family_used = resolve_font(seg['family'], seg['bold'])[1]
+        desc = f"{seg['size']:g} pt{' bold' if seg['bold'] else ''} {family_used}"
+        if desc not in seen:
+            seen.append(desc)
+    return ' + '.join(seen)
+
+
+def _format_notes(segments) -> str:
+    """Parenthesised note listing anything on the line that had to be assumed."""
+    notes = []
+    if any(seg['estimated'] for seg in segments):
+        notes.append("size est.")
+    assumed = []
+    for seg in segments:
+        _, family_used, fallback = resolve_font(seg['family'], seg['bold'])
+        if (fallback or seg['family_assumed']) and family_used not in assumed:
+            assumed.append(family_used)
+    if assumed:
+        notes.append(f"font assumed {', '.join(assumed)}")
+    return f" ({', '.join(notes)})" if notes else ""
 
 
 def get_label_cell_usable_width_pt(label_docx) -> float:
@@ -255,33 +528,35 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
     import pandas as pd
     from pathlib import Path
     from loguru import logger
-    import re
     import glob
     from uvbekutils import exit_yes, select_file
 
-    def print_max_line_info(df: pd.DataFrame, line_list_field: str, line_fonts: list = None,
-                            usable_width_pt: float = None) -> str:
+    def print_max_line_info(df: pd.DataFrame, line_list_field: str, line_meta: list = None,
+                            usable_width_pt: float = None):
         """Finds and prints the widest substituted line for each line position in the label.
 
-        Measures each substituted line's real rendered width in its actual font family,
-        point size, and weight, then compares against the label cell's usable width and
-        appends a warning (with a suggested smaller size) if the line will not fit. The
-        widest line is chosen by measured width, not character count, because fonts are
-        proportional.
+        Measures each substituted line segment by segment - in each segment's own font
+        family, point size, and weight - then compares the total against the label cell's
+        usable width and appends a warning (with a suggested smaller size) if the line will
+        not fit. The widest line is chosen by measured width, not character count, because
+        fonts are proportional.
 
         Args:
             df (pd.DataFrame): DataFrame where each row contains a list of substituted
-                label lines in the column specified by line_list_field.
+                label lines (each itself a list of segments) in line_list_field.
             line_list_field (str): Name of the column containing per-row lists of label lines.
-            line_fonts (list): Optional list of per-line font-info dicts from
-                get_label_line_font_info(), giving each line's size, bold, and font family.
+            line_meta (list): Optional per-line dicts from get_label_line_segments(),
+                supplying each line's paragraph indent.
             usable_width_pt (float): Usable cell width in points from
                 get_label_cell_usable_width_pt(); the fit limit for every line.
 
         Returns:
-            str: Newline-joined summary of the widest line, its size/font/width, and any
-                overflow warning for each label line position, or 'None' if empty.
+            tuple: (summary, has_overflow). summary is a newline-joined report of the
+                widest line, its sizes/fonts/width, and any overflow warning for each label
+                line position, or 'None' if empty. has_overflow is True when at least one
+                line will not fit.
         """
+        has_overflow = False
         if df.empty:
             pyautobek.alert(f"No counties are being selected based on the field '{used_field}'.\n\n"
                             f"Checking for these copunties will be skipped.\n"
@@ -293,14 +568,11 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
             number_of_lines = len(df[line_list_field].iloc[0])
             result_lines = []
             for line_number in range(number_of_lines):
-                line_data = [line[line_number] for line in df[line_list_field]]
+                # Trailing spaces do not count toward the width - Word ignores them when
+                # deciding where to wrap.
+                line_data = [_strip_trailing(line[line_number]) for line in df[line_list_field]]
 
-                info = line_fonts[line_number] if line_fonts and line_number < len(line_fonts) else {}
-                size_pt = info.get('size')
-                estimated = info.get('estimated', False)
-                bold = info.get('bold', False)
-                font = info.get('font')
-                font_assumed = font is None  # no font named in the docx; default assumed
+                info = line_meta[line_number] if line_meta and line_number < len(line_meta) else {}
 
                 # This line's usable width = the cell's usable width minus this
                 # paragraph's own indent (indents narrow the text and vary per line).
@@ -308,34 +580,28 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
                 if usable_width_pt is not None:
                     line_usable = usable_width_pt - info.get('indent_pt', 0.0)
 
-                # Resolve the real font file once; measure every candidate line's width
-                # and keep the widest by RENDERED width (not char count, since fonts are
-                # proportional). font_path is None only if no usable font was found.
-                font_path, family_used, fallback = resolve_font(font, bold)
-                measured = None
-                if size_pt and font_path:
-                    widths = [(ln, width_pt(font_path, ln, size_pt)) for ln in line_data]
-                    max_line, measured = max(widths, key=lambda t: t[1])
+                # Measure every candidate line and keep the widest by RENDERED width (not
+                # char count, since fonts are proportional). A width is None only when a
+                # segment has no size or no usable font file on this machine.
+                widths = [(segs, segments_width_pt(segs)) for segs in line_data]
+                measurable = [(segs, w) for segs, w in widths if w is not None]
+                if measurable:
+                    max_segments, measured = max(measurable, key=lambda t: t[1])
                 else:
-                    max_line = max(line_data, key=len)
+                    max_segments = max(line_data, key=lambda segs: len(segments_text(segs)))
+                    measured = None
+                max_line = segments_text(max_segments)
+                note_str = _format_notes(max_segments)
 
-                size_num = f"{size_pt:g}" if size_pt else ""
-                weight_str = " bold" if bold else ""
-                # Note when the family or size had to be assumed rather than read.
-                notes = []
-                if estimated:
-                    notes.append("size est.")
-                if font_assumed or fallback:
-                    notes.append(f"font assumed {family_used}")
-                note_str = f" ({', '.join(notes)})" if notes else ""
-                font_str = f" {family_used}" if size_pt else ""
-
-                if measured is not None and line_usable:
-                    over = measured > line_usable
-                    meta_str = (f"  - {size_num} pt{weight_str}{font_str}, "
+                if measured is not None and line_usable is not None and line_usable > 0:
+                    # A guard band, because Pillow and Word do not agree to the last
+                    # fraction of a point and a real overflow can be under half a point.
+                    over = measured > line_usable * FIT_TOLERANCE
+                    meta_str = (f"  - {_format_description(max_segments)}, "
                                 f"{measured:.0f} of {line_usable:.0f} pt wide{note_str}")
                     if over:
-                        suggested = max_fitting_size_pt(font_path, max_line, size_pt, line_usable)
+                        has_overflow = True
+                        suggested = max_fitting_size_pt(max_segments, line_usable)
                         if suggested and suggested >= 5:
                             fit_str = f"try {suggested:g} pt"
                         else:
@@ -352,9 +618,9 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
                 line_info = f"Line {line_number + 1},  '{max_line}'{meta_str}{warning}"
                 print(line_info)
                 result_lines.append(line_info)
-                result = '\n'.join(result_lines)
+            result = '\n'.join(result_lines)
 
-        return result
+        return result, has_overflow
 
     if label_docx is None:
         label_docx = select_file("PICK LABEL DOCX",
@@ -368,7 +634,7 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
     label_docx = Path(label_docx).expanduser()
 
     label_text = get_label_text(label_docx)
-    label_line_fonts = get_label_line_font_info(label_docx)
+    label_lines = get_label_line_segments(label_docx)
     usable_width_pt = get_label_cell_usable_width_pt(label_docx)
     logger.info(f"Label cell usable width: {usable_width_pt} pt")
     keys = find_keys_in_text(label_text)
@@ -409,19 +675,15 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
     df['lines'] = df['lines'].astype('object')
 
     for index, row in df.iterrows():
-        tmp_label_text = label_text  # so we start fresh with the label info containing the {} keys
+        # Substitute into the template's formatting segments rather than into one joined
+        # string, so every piece of a line keeps the font, size, and weight it will really
+        # be rendered in (a line mixes them - see substitute_segments()).
+        # TODO what ot do if nan?  takes up only one space but might be much larger when filled in later.
+        values = {fld: safe_str(df.at[index, fld]) for fld in keys}
 
-        for fld in keys:
-            # replace occurrences of the key with the value in the df (ex '{county}' gets replaced with 'Dade')
-            # tmp_label_text = tmp_label_text.replace(fld, df.at[index, fld])
-            # TODO what ot do if nan?  takes up only one space but might be much larger when filled in later.
-            tmp_label_text = re.sub(fld, safe_str(df.at[index, fld]), tmp_label_text, flags=re.IGNORECASE)
-
-        line_list = safe_str(tmp_label_text).split('\n')  # create list of lines from the text
-        line_list = [line.strip('\t ') for line in line_list if len(line.strip('\t ')) > 0]  # trim and remove blanks
-
-        # fill a field in the df with the list of line text
-        df.at[index, 'lines'] = line_list
+        # fill a field in the df with the list of substituted lines (each a segment list)
+        df.at[index, 'lines'] = [substitute_segments(line['segments'], values)
+                                 for line in label_lines]
 
     # Collect max line info for alert display
     max_line_results = []
@@ -450,16 +712,16 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
             print(df_non_nan[keys])
             print()
             print("MAX LINES IN SUBSTITUTED SCRIPT INFO FOR ALL ROWS WITH NO NAN VALUES")
-            result = print_max_line_info(df_non_nan, 'lines', line_fonts=label_line_fonts,
-                                         usable_width_pt=usable_width_pt)
-            max_line_results.append(("ALL ROWS WITH NO NAN VALUES", result, len(df_non_nan)))
+            result, over = print_max_line_info(df_non_nan, 'lines', line_meta=label_lines,
+                                               usable_width_pt=usable_width_pt)
+            max_line_results.append(("ALL ROWS WITH NO NAN VALUES", result, len(df_non_nan), over))
         print()
         a = 1
     else:
         print("MAX LINES IN SUBSTITUTED SCRIPT INFO FOR ALL ROWS")
-        result = print_max_line_info(df, 'lines', line_fonts=label_line_fonts,
-                                     usable_width_pt=usable_width_pt)
-        max_line_results.append(("ALL ROWS", result, len(df)))
+        result, over = print_max_line_info(df, 'lines', line_meta=label_lines,
+                                           usable_width_pt=usable_width_pt)
+        max_line_results.append(("ALL ROWS", result, len(df), over))
         print()
 
     # A row is "used" when its used_field is genuinely non-blank: not empty,
@@ -487,23 +749,35 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
     else:
         print(f"MAX LINES IN SUBSTITUTED SCRIPT INFO FOR USED SUB ROWS ('{used_field}' not blank)")
         df_used_counties = df.loc[used_mask]
-        result = print_max_line_info(df_used_counties, 'lines', line_fonts=label_line_fonts,
-                                     usable_width_pt=usable_width_pt)
-        max_line_results.append((f"'USED' COUNTIES ('{used_field}' not blank)", result, len(df_used_counties)))
+        result, over = print_max_line_info(df_used_counties, 'lines', line_meta=label_lines,
+                                           usable_width_pt=usable_width_pt)
+        max_line_results.append((f"'USED' COUNTIES ('{used_field}' not blank)", result,
+                                 len(df_used_counties), over))
         print()
 
     print("RAW LABEL DATA:")
     print(label_text)
 
     # Build and display alert with max line lengths and label text
+    any_overflow = any(section_over for _, _, _, section_over in max_line_results)
+
     alert_lines = []
+    alert_lines.append("CHECK LABEL LINE FITS")
+    alert_lines.append("")
     alert_lines.append("--- LABEL TEMPLATE TEXT ---")
     alert_lines.append(label_text)
     alert_lines.append("")
-    for section_name, section_result, row_count in max_line_results:
+    alert_lines.append("")
+    if any_overflow:
+        # Loud, and above the detail, so a line that will wrap cannot be scrolled past.
+        alert_lines.append("*** ERRORS WERE ENCOUNTERED BELOW - SOME LINES DO NOT FIT ***")
+        alert_lines.append("")
+        alert_lines.append("")
+    for section_name, section_result, row_count, _ in max_line_results:
         alert_lines.append(f"--- {section_name} ---")
         alert_lines.append(section_result)
         alert_lines.append(f"({row_count} rows of {total_rows})")
+        alert_lines.append("")
         alert_lines.append("")
 
     alert_lines.append(f"'Used' counties based on field {used_field}")
@@ -515,10 +789,14 @@ def max_label_lengths(*, used_field: str = None, label_docx=None, initial_attach
 
     if usable_width_pt:
         alert_lines.append(
-            f"Fit check: each line's real rendered width (its actual font, size, and\n"
-            f"bold) is measured and compared to the label cell's usable width of\n"
-            f"{usable_width_pt:.1f} pt ({usable_width_pt / 72:.2f} in). A line marked TOO WIDE will\n"
-            f"wrap in Word; try the suggested smaller size or shorten the text.")
+            f"Fit check: each line is measured piece by piece, in the real font, size, and\n"
+            f"bold of every run on it (a symbol and the words beside it differ), and the\n"
+            f"total compared to the label cell's usable width of {usable_width_pt:.1f} pt "
+            f"({usable_width_pt / 72:.2f} in).\n"
+            f"A line is called TOO WIDE past {FIT_TOLERANCE:.0%} of that width, because Word and this\n"
+            f"measurement do not agree to the last fraction of a point. Suggested sizes are\n"
+            f"sized to {SUGGEST_TOLERANCE:.0%} so they land with a little room to spare; shorten the text\n"
+            f"instead if the suggestion is too small to read.")
     else:
         alert_lines.append(
             "Fit check: the label cell width could not be read, so line widths were\n"
@@ -539,8 +817,9 @@ def find_keys_in_text(label_text: str) -> set:
         set: Set of key strings found (e.g. {'{county}', '{phone}'}).
     """
 
-    import re
-    keys = set(re.findall(r'{[a-zA-Z0-9]+}', safe_str(label_text)))
+    # Same pattern substitute_segments() matches with, so the keys looked up in the BOE
+    # sheet and the tokens actually replaced can never drift apart.
+    keys = set(_KEY_RE.findall(safe_str(label_text)))
     return keys
 
 
@@ -568,28 +847,6 @@ if __name__ == '__main__':
     # or {specialurl}
     # Early Voting Now thru Feb 18
     #     """
-
-    # 30 per page, Avery 5161 Label
-    # Font Size | Approximate Characters per Line
-    # ----------|--------------------------------
-    # 8 pt      | 52-55 characters
-    # 9 pt      | 46-49 characters
-    # 10 pt     | 42-45 characters
-    # 11 pt     | 38-41 characters
-    # 12 pt     | 35-38 characters
-    # 13 pt     | 32-35 characters
-    # 14 pt     | 30-33 characters
-
-    # 20 per page, Avery 5161 Label
-    # Font Size | Approximate Characters per Line
-    # ----------|--------------------------------
-    # 8 pt      | 80-85 characters
-    # 9 pt      | 71-76 characters
-    # 10 pt     | 64-68 characters
-    # 11 pt     | 58-62 characters
-    # 12 pt     | 53-57 characters
-    # 13 pt     | 49-52 characters
-    # 14 pt     | 46-49 characters
 
     # label_text_file = Path("~/Dropbox/Postcard Files/Attachments/Campaigns/TEST NAN3/Input/label.txt").expanduser()
     # with open(label_text_file, "r") as f:

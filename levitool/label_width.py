@@ -9,6 +9,14 @@ This module measures the true width of a string in its real font family, point s
 and weight using Pillow (already a project dependency), so the fit check matches what
 Word actually renders. Widths are compared against the label cell's usable width
 (cell width minus its left/right margins), read straight from the docx.
+
+A label line is measured as a list of *segments* rather than as one string, because Word
+mixes formatting inside a single line: the CFCG logo run is a different family and size
+from the sentence beside it. Measuring a whole line in one family collapsed that logo to
+an Arial '.notdef' advance and under-reported the line by about 5 pt, which was enough to
+call a wrapping line "fits". Each segment is a dict with the keys 'text', 'family',
+'size', 'bold' and 'is_symbol'; see get_label_line_segments() in
+find_longest_value_in_label_rows.py for how they are built.
 """
 
 import math
@@ -24,6 +32,18 @@ _REF_SIZE = 1000
 
 # Fallback family used when a label's named font is not installed on this machine.
 DEFAULT_FAMILY = "Arial"
+
+# Fraction of the usable width a line may occupy before it is called TOO WIDE. Pillow and
+# Word do not agree to the last fraction of a point (kerning and hinting differ), and a
+# real overflow can be as small as 0.3 pt, so a line that measures within 1% of the limit
+# is treated as overflowing. This cannot be loosened much: a correct line in a real label
+# was measured at 98.5% of the usable width.
+FIT_TOLERANCE = 0.99
+
+# Fraction of the usable width a *suggested* font size is sized to fit. Looser than
+# FIT_TOLERANCE on purpose: once a line has to be resized anyway, landing a little small
+# is better than landing exactly on the edge and wrapping.
+SUGGEST_TOLERANCE = 0.97
 
 # Directories searched for installed font files (macOS first, then common Linux/Windows).
 _FONT_DIRS = [
@@ -111,26 +131,100 @@ def width_pt(font_path: str, text: str, size_pt: float) -> float:
     return _ref_font(font_path).getlength(text) * size_pt / _REF_SIZE
 
 
-def text_width_pt(text: str, family: str, size_pt: float, bold: bool):
-    """Rendered width of text in points, or None if no usable font was found."""
-    if not size_pt:
-        return None
-    path, _, _ = resolve_font(family, bold)
+def segment_width_pt(segment: dict) -> float:
+    """Rendered width of one segment in points, or None if it cannot be measured."""
+    text = segment.get('text') or ''
+    size_pt = segment.get('size')
+    if not text or not size_pt:
+        return 0.0 if not text else None
+    path, _, _ = resolve_font(segment.get('family'), bool(segment.get('bold')))
     if path is None:
         return None
     return width_pt(path, text, size_pt)
 
 
-def max_fitting_size_pt(font_path: str, text: str, current_size_pt: float,
-                        usable_pt: float) -> float:
-    """Largest point size (in 0.5 pt steps) at which text fits within usable_pt.
+def segments_width_pt(segments) -> float:
+    """Total rendered width of a line's segments in points.
 
-    Width is proportional to size, so the exact largest fitting size is
-    ``usable_pt * current_size / width_at_current``. It is rounded down to the nearest
-    half point so the suggested size is guaranteed to fit.
+    Each segment is measured in its own family, size, and weight, then the advances are
+    summed - that is how Word lays a line out, and it is the whole point of keeping the
+    line split into segments rather than measuring it as one string.
+
+    Args:
+        segments (list): Segment dicts with 'text', 'family', 'size', and 'bold' keys.
+
+    Returns:
+        float: Summed width in points, or None if any non-empty segment could not be
+            measured (no font size, or no usable font file on this machine).
     """
-    w = width_pt(font_path, text, current_size_pt)
-    if not w:
+    total = 0.0
+    for seg in segments:
+        w = segment_width_pt(seg)
+        if w is None:
+            return None
+        total += w
+    return total
+
+
+def _dominant_text_size(text_segments):
+    """Point size of the text segment covering the most characters, or None."""
+    by_size = {}
+    for seg in text_segments:
+        size_pt = seg.get('size')
+        if size_pt:
+            by_size[size_pt] = by_size.get(size_pt, 0) + len(seg.get('text') or '')
+    if not by_size:
         return None
-    exact = usable_pt * current_size_pt / w
-    return math.floor(exact * 2) / 2
+    return max(by_size, key=by_size.get)
+
+
+def max_fitting_size_pt(segments, usable_pt: float) -> float:
+    """Largest point size (in 0.5 pt steps) for a line's text so the line fits.
+
+    Symbol segments (the CFCG logo and the like) are held at their current size and only
+    the text segments are resized, which is what happens in practice: the sentence gets
+    made smaller and the logo is left alone. Width is proportional to size, so the text
+    segments can be scaled by a single factor:
+
+        factor = (usable_pt * SUGGEST_TOLERANCE - symbol_width) / text_width
+
+    The returned size is that factor applied to the dominant text size and rounded down to
+    the nearest half point. Rounding down is not enough on its own when a line carries more
+    than one text size - the others are scaled by the same ratio and may still land over -
+    so the result is re-measured and stepped down by half a point until it really fits.
+
+    Args:
+        segments (list): Segment dicts for the line, as measured by segments_width_pt().
+        usable_pt (float): The line's usable width in points.
+
+    Returns:
+        float: Suggested point size, or None when no text can be resized (no text
+            segments, unmeasurable widths, or the symbols alone already overflow).
+    """
+    text_segments = [s for s in segments if not s.get('is_symbol') and (s.get('text') or '')]
+    symbol_segments = [s for s in segments if s.get('is_symbol')]
+
+    text_w = segments_width_pt(text_segments)
+    symbol_w = segments_width_pt(symbol_segments)
+    if not text_w or symbol_w is None:
+        return None
+
+    dominant_size = _dominant_text_size(text_segments)
+    if not dominant_size:
+        return None
+
+    budget = usable_pt * SUGGEST_TOLERANCE
+    factor = (budget - symbol_w) / text_w
+    if factor <= 0:
+        return None
+
+    suggested = math.floor(factor * dominant_size * 2) / 2
+    while suggested >= 5:
+        scaled = [dict(s, size=s['size'] * suggested / dominant_size) for s in text_segments]
+        width = segments_width_pt(scaled)
+        if width is None:
+            return None
+        if symbol_w + width <= budget:
+            return suggested
+        suggested -= 0.5
+    return suggested

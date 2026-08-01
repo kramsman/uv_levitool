@@ -5,7 +5,7 @@ Create script and label files from Word (.docx) templates and an Excel (.xlsx) i
 ## Features
 
 - **LeviTool (Mail Merge)** - Reads county/district data from an Excel spreadsheet ("Counties" sheet) and merges it into Word template files by replacing `{FIELD}` placeholders with actual values. Produces both .docx and .pdf output files organized in an Output directory.
-- **Max Row Length** - Checks the length of each line in label templates after field substitution to ensure text fits on Avery labels (supports 30-per-page and 20-per-page layouts). Displays a reference table of character limits by font size.
+- **Max Row Length** - Checks each line of a label template after field substitution to make sure it fits on the label without wrapping. Every line is measured piece by piece in the real font, size, and weight of each run on it, and compared to the label cell's usable width read from the docx itself. Lines that will wrap are flagged with a suggested smaller point size.
 - **Check URLs** - Validates Board of Elections (BOE) URLs from the spreadsheet, flagging unreachable or broken links. Optionally opens URLs in a browser for manual review.
 - **Check Short URLs** - Compares shortened URLs (Rebrandly, Bitly, etc.) against their expected full URLs to verify they redirect correctly.
 

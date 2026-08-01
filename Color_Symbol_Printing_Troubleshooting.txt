@@ -1,0 +1,67 @@
+COLOR SYMBOL WON'T PRINT - TROUBLESHOOTING GUIDE
+=================================================
+
+Some labels include a color symbol. If it prints in black instead of
+color, follow these steps in order. They work the same on Mac or Windows.
+
+At each step, notice whether the symbol looks COLOR or BLACK.
+
+
+STEP 1 - Open the PDF and look at the symbol on screen
+------------------------------------------------------
+Note which app it opened in. Common ones:
+  - Windows: Adobe Acrobat Reader, Chrome, Microsoft Edge
+  - Mac:     Preview, Chrome
+
+Is the symbol COLOR or BLACK on your screen?
+  - If it is already BLACK on screen -> skip to STEP 4.
+  - If it is COLOR -> go to STEP 2.
+
+
+STEP 2 - Print it
+-----------------
+  - Prints in COLOR -> Done.
+  - Prints BLACK    -> go to STEP 3.
+
+
+STEP 3 - Print a color photo (any colorful picture)
+---------------------------------------------------
+This checks whether the printer can print color at all.
+  - The photo also prints BLACK -> the problem is the PRINTER
+    (a grayscale setting is on, or it is a black-and-white printer).
+    Turn off grayscale / "black and white" in the print settings. STOP HERE.
+  - The photo prints in COLOR -> the problem is specific to the symbol.
+    Go to STEP 4.
+
+
+STEP 4 - Open the same PDF in a DIFFERENT app
+---------------------------------------------
+If it first opened in Adobe Reader, try Chrome, Edge, or Preview instead
+(or vice versa).
+  - The symbol now shows in COLOR in the new app -> the first app was
+    dropping the color. Go to STEP 5.
+
+
+STEP 5 - Print from that other app
+----------------------------------
+  - Prints in COLOR -> Done. Use this app for these labels from now on.
+
+
+STEP 6 - Turn on "Print as image", then print again
+---------------------------------------------------
+  - Adobe Reader: Advanced -> Print As Image
+  - Chrome / Edge: More settings -> uncheck "Use system dialog"
+    (or just print from the app that worked in STEP 4)
+
+If this fixes it, the color symbol was the issue - not the printer.
+
+
+STILL BLACK AFTER EVERY STEP?
+-----------------------------
+Please report back with:
+  - Are you on Mac or Windows?
+  - Which app(s) you tried
+  - Whether the symbol was COLOR or BLACK - on screen vs. on paper -
+    at each step
+
+That tells us exactly where the color is being lost so we can fix it.
