@@ -2,7 +2,9 @@ COLOR SYMBOL WON'T PRINT - TROUBLESHOOTING GUIDE
 =================================================
 
 Some labels include a color symbol. If it prints in black instead of
-color, follow these steps in order. They work the same on Mac or Windows.
+color, follow these steps in order. They work the same on Mac, Windows,
+or iPad/iPhone. Where an iPad or iPhone is different, there is an
+"ON IPAD" note under the step.
 
 At each step, notice whether the symbol looks COLOR or BLACK.
 
@@ -12,16 +14,30 @@ STEP 1 - Open the PDF and look at the symbol on screen
 Note which app it opened in. Common ones:
   - Windows: Adobe Acrobat Reader, Chrome, Microsoft Edge
   - Mac:     Preview, Chrome
+  - iPad/iPhone: Files (Quick Look), Books, Mail's preview, Safari,
+                 Adobe Acrobat Reader, Chrome
 
 Is the symbol COLOR or BLACK on your screen?
   - If it is already BLACK on screen -> skip to STEP 4.
   - If it is COLOR -> go to STEP 2.
+
+ON IPAD: This is the most important answer in the whole guide. Please
+write down BOTH of these before you print anything:
+    a) which app the PDF opened in
+    b) whether the symbol is COLOR or BLACK on the screen
+If the symbol is COLOR on screen, the PDF file itself is fine and the
+problem is happening on the way to the printer.
 
 
 STEP 2 - Print it
 -----------------
   - Prints in COLOR -> Done.
   - Prints BLACK    -> go to STEP 3.
+
+ON IPAD: The iPad's print box has far fewer settings than a Mac or PC.
+Before you tap Print, tap "Options" (or the printer's name) and look for
+a "Black & White" or "Color" switch. If Black & White is on, turn it off
+and print again.
 
 
 STEP 3 - Print a color photo (any colorful picture)
@@ -41,6 +57,12 @@ If it first opened in Adobe Reader, try Chrome, Edge, or Preview instead
   - The symbol now shows in COLOR in the new app -> the first app was
     dropping the color. Go to STEP 5.
 
+ON IPAD: Tap the Share button (the square with the arrow going up), then
+pick a different app from the list - Books, Adobe Acrobat Reader, or
+Chrome. If the PDF arrived by email, try tapping it in Mail to preview
+it there as well. You are looking for an app that shows the symbol in
+COLOR.
+
 
 STEP 5 - Print from that other app
 ----------------------------------
@@ -55,12 +77,33 @@ STEP 6 - Turn on "Print as image", then print again
 
 If this fixes it, the color symbol was the issue - not the printer.
 
+ON IPAD: There is no "Print as image" setting on an iPad. Go to STEP 7
+instead.
+
+
+STEP 7 - ON IPAD ONLY: the screenshot test
+------------------------------------------
+The iPad has no "Print as image" button, but a screenshot does the same
+job - it turns the page into a plain picture before the printer sees it.
+
+  1. Open the PDF and make the label fill the screen.
+  2. Take a screenshot (press the top button and the volume-up button at
+     the same time; on older iPads, the top button and the Home button).
+  3. Open Photos, find the screenshot, tap Share, then Print.
+
+  - The screenshot prints in COLOR -> the printer is fine, and the color
+    was being lost when the PDF was sent to it. Use this method, or
+    print from a Mac or PC, until we fix it.
+  - The screenshot prints BLACK -> the color is being lost earlier, at
+    the printer itself. Go back to STEP 3.
+
 
 STILL BLACK AFTER EVERY STEP?
 -----------------------------
 Please report back with:
-  - Are you on Mac or Windows?
-  - Which app(s) you tried
+  - Are you on Mac, Windows, iPad, or iPhone?
+  - Which app(s) you tried, including the one it opened in first
+  - On an iPad: did the screenshot in STEP 7 print in color?
   - Whether the symbol was COLOR or BLACK - on screen vs. on paper -
     at each step
 
